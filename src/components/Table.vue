@@ -25,6 +25,7 @@
                 :field="col.field" 
                 :header="col.header" 
                 :sortable="col.sortable"
+                :sortField="col.sortField"
                 :style="col.style">
             <template #body="{ data }">
                 <!-- Button type -->
@@ -73,7 +74,7 @@ const filters = ref({
 // Column configuration
 const columns = [
   { field: 'ecli', header: 'ECLI', sortable: true, style: 'min-width: 200px', type: 'default' },
-  { field: 'date', header: 'Date', sortable: true, style: 'min-width: 120px', type: 'default' },
+  { field: 'date', header: 'Date', sortable: true, style: 'min-width: 120px', type: 'default', sortField: 'dateValue' },
   { field: 'summary', header: 'Summary', sortable: true, style: 'min-width: 300px', type: 'ellipsis', maxWidth: '300px' },
   { field: 'instance', header: 'Instance', sortable: true, style: 'min-width: 200px', type: 'default' },
   { field: 'domain', header: 'Domain', sortable: false, style: 'min-width: 180px', type: 'default' },
@@ -90,9 +91,24 @@ const tableDocs = computed(() => {
   return props.docs.map(doc => {
     const data = doc.data || {}
     
+    // Parse date string to Date object for proper sorting
+    const dateStr = data.date_decision
+    let dateValue: Date | null = null
+    let dateDisplay = '-'
+    
+    if (dateStr && dateStr !== '-') {
+      const parsedDate = new Date(dateStr)
+      // Check if date is valid
+      if (!isNaN(parsedDate.getTime())) {
+        dateValue = parsedDate
+        dateDisplay = dateStr
+      }
+    }
+    
     return {
       ecli: doc.id || '-',
-      date: data.date_decision || '-',
+      date: dateDisplay,
+      dateValue: dateValue,
       summary: data.summary || '-',
       instance: data.instance || '-',
       domain: Array.isArray(data.domains) && data.domains.length > 0 
