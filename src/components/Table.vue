@@ -188,6 +188,8 @@ const exportCSV = () => {
 <style scoped>
 .table-container {
   width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
 }
 
 .search-bar {
