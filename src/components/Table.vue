@@ -18,7 +18,9 @@
                    scrollable 
                    scrollHeight="600px"
                    v-model:filters="filters"
-                   :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic']">
+                   :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic']"
+                   paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
+                   currentPageReportTemplate="Showing {first} to {last} of {totalRecords} documents">
         
         <Column v-for="col in columns" 
                 :key="col.field" 
