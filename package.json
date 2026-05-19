@@ -1,0 +1,48 @@
+{
+  "name": "legal-docs-visualizer",
+  "version": "0.1.0",
+  "description": "A Vue component library for visualizing legal documents",
+  "type": "module",
+  "main": "./dist/legal-docs-visualizer.umd.js",
+  "module": "./dist/legal-docs-visualizer.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/legal-docs-visualizer.es.js",
+      "require": "./dist/legal-docs-visualizer.umd.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "legal-docs-client": "*"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.0",
+    "vue": "^3.4.21",
+    "vue-tsc": "^2.0.13"
+  },
+  "keywords": [
+    "vue",
+    "component",
+    "legal",
+    "documents",
+    "visualizer"
+  ],
+  "author": "",
+  "license": "MIT"
+}
