@@ -7,6 +7,8 @@
                 </InputIcon>
                 <InputText v-model="filters['global'].value" placeholder="Search..." />
             </IconField>
+            
+            <Button label="Export CSV" icon="pi pi-download" @click="exportCSV" size="small" />
         </div>
         
         <DataTable :value="tableDocs" 
@@ -109,6 +111,44 @@ const openFullText = (url: string) => {
   window.open(url, '_blank')
 }
 
+// Export table data as CSV
+const exportCSV = () => {
+  if (tableDocs.value.length === 0) return
+  
+  // Define headers
+  const headers = columns.filter(col => col.type !== 'button').map(col => col.header)
+  
+  // Create CSV content
+  const csvContent = [
+    headers.join(','),
+    ...tableDocs.value.map(row => {
+      return columns
+        .filter(col => col.type !== 'button')
+        .map(col => {
+          const value = (row as any)[col.field]
+          // Escape quotes and wrap in quotes if contains comma or newline
+          const stringValue = String(value || '')
+          if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+            return `"${stringValue.replace(/"/g, '""')}"`
+          }
+          return stringValue
+        })
+        .join(',')
+    })
+  ].join('\n')
+  
+  // Create download link
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute('download', `legal-documents-${new Date().toISOString().split('T')[0]}.csv`)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 </script>
 
 <style scoped>
@@ -119,7 +159,9 @@ const openFullText = (url: string) => {
 .search-bar {
   margin-bottom: 1rem;
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
 }
 
 .search-bar :deep(.p-iconfield) {
