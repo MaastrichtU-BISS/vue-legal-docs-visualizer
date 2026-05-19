@@ -20,7 +20,9 @@
                    v-model:filters="filters"
                    :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic']"
                    paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
-                   currentPageReportTemplate="Showing {first} to {last} of {totalRecords} documents">
+                   currentPageReportTemplate="Showing {first} to {last} of {totalRecords} documents"
+                   @row-click="onRowClick"
+                   :rowHover="true">
         
         <Column v-for="col in columns" 
                 :key="col.field" 
@@ -67,6 +69,10 @@ export interface Props {
 }
 
 const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  rowClick: [doc: any]
+}>()
 
 // Initialize filters
 const filters = ref({
@@ -123,6 +129,16 @@ const tableDocs = computed(() => {
     }
   })
 })
+
+// Handle row click - find and emit the original document
+const onRowClick = (event: any) => {
+  const clickedRow = event.data
+  // Find the original document by ECLI
+  const originalDoc = props.docs?.find(doc => doc.id === clickedRow.ecli)
+  if (originalDoc) {
+    emit('rowClick', originalDoc)
+  }
+}
 
 // Open full text URL in new tab
 const openFullText = (url: string) => {
@@ -185,5 +201,9 @@ const exportCSV = () => {
 .search-bar :deep(.p-iconfield) {
   width: 100%;
   max-width: 400px;
+}
+
+.table-container :deep(.p-datatable-tbody > tr) {
+  cursor: pointer;
 }
 </style>

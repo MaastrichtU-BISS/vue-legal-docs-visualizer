@@ -1,7 +1,7 @@
 <template>
     <div>
         <div v-if="mode == VisualizationMode.TABLE">
-            <Table :docs="docs" />
+            <Table :docs="docs" @row-click="handleRowClick" />
         </div>
     </div>
 </template>
@@ -16,6 +16,10 @@ export interface Props {
 }
 
 defineProps<Props>();
+
+const handleRowClick = (doc: any) => {
+    console.log('Clicked document:', doc)
+}
 
 </script>
 
