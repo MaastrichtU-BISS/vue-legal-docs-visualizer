@@ -1,6 +1,22 @@
 <template>
-    <DataTable :value="tableDocs" tableStyle="min-width: 50rem" :paginator="true" :rows="10" 
-               scrollable scrollHeight="600px">
+    <div class="table-container">
+        <div class="search-bar">
+            <IconField>
+                <InputIcon>
+                    <i class="pi pi-search" />
+                </InputIcon>
+                <InputText v-model="filters['global'].value" placeholder="Search..." />
+            </IconField>
+        </div>
+        
+        <DataTable :value="tableDocs" 
+                   tableStyle="min-width: 50rem" 
+                   :paginator="true" 
+                   :rows="10" 
+                   scrollable 
+                   scrollHeight="600px"
+                   v-model:filters="filters"
+                   :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic']">
         
         <Column v-for="col in columns" 
                 :key="col.field" 
@@ -29,19 +45,28 @@
             </template>
         </Column>
     </DataTable>
+    </div>
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
 
 export interface Props {
   docs?: any[]
 }
 
 const props = defineProps<Props>()
+
+// Initialize filters
+const filters = ref({
+  global: { value: '', matchMode: 'contains' }
+})
 
 // Column configuration
 const columns = [
@@ -85,3 +110,20 @@ const openFullText = (url: string) => {
 }
 
 </script>
+
+<style scoped>
+.table-container {
+  width: 100%;
+}
+
+.search-bar {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.search-bar :deep(.p-iconfield) {
+  width: 100%;
+  max-width: 400px;
+}
+</style>
