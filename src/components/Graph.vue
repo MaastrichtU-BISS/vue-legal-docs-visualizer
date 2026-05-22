@@ -2,6 +2,7 @@
     <div class="graph-container">
         <div ref="cyContainer" class="cy-container"></div>
         <div ref="tooltip" class="graph-tooltip">
+            <div class="graph-tooltip-arrow"></div>
             <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
             <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
         </div>
@@ -11,6 +12,22 @@
 <script lang="ts" setup>
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
 import cytoscape, { Core } from 'cytoscape'
+import { createPopper } from '@popperjs/core'
+
+// Dynamically import and register cytoscape-popper
+let popperRegistered = false
+
+const registerPopper = async () => {
+  if (!popperRegistered) {
+    const cytoscapePopper = await import('cytoscape-popper')
+    const extension = cytoscapePopper.default
+    
+    // Pass the createPopper factory to the extension
+    cytoscape.use(extension(createPopper) as any)
+    
+    popperRegistered = true
+  }
+}
 
 export interface Props {
   docs?: any[]
@@ -27,9 +44,13 @@ const tooltip = ref<HTMLElement | null>(null)
 const tooltipContent = ref({ ecli: '', summary: '' })
 let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
+let currentPopper: any = null
 
-const initGraph = () => {
+const initGraph = async () => {
   if (!cyContainer.value || !props.docs || props.docs.length === 0) return
+
+  // Register popper extension first
+  await registerPopper()
 
   // Create nodes from docs
   const nodes = props.docs.map(doc => ({
@@ -185,10 +206,54 @@ const initGraph = () => {
     
     // Show tooltip after a delay
     tooltipTimeout = setTimeout(() => {
-      if (tooltip.value) {
-        tooltip.value.style.left = `${event.renderedPosition.x}px`
-        tooltip.value.style.top = `${event.renderedPosition.y - 60}px`
+      if (tooltip.value && node) {
+        // Create popper instance for this node
+        currentPopper = (node as any).popper({
+          content: tooltip.value,
+          popper: {
+            placement: 'top',
+            modifiers: [
+              {
+                name: 'arrow',
+                options: {
+                  element: tooltip.value?.querySelector('.graph-tooltip-arrow')
+                }
+              },
+              {
+                name: 'offset',
+                options: {
+                  offset: [0, 12]
+                }
+              },
+              {
+                name: 'preventOverflow',
+                options: {
+                  boundary: cyContainer.value,
+                  padding: 10
+                }
+              },
+              {
+                name: 'flip',
+                options: {
+                  fallbackPlacements: ['bottom', 'left', 'right']
+                }
+              }
+            ]
+          }
+        })
+        
         tooltip.value.style.display = 'block'
+        tooltip.value.style.opacity = '1'
+        
+        // Update popper position
+        const update = () => {
+          if (currentPopper && currentPopper.update) {
+            currentPopper.update()
+          }
+        }
+        
+        // Update on zoom/pan
+        cy?.on('pan zoom resize', update)
       }
     }, 300)
   })
@@ -214,7 +279,19 @@ const initGraph = () => {
     
     if (tooltip.value) {
       tooltip.value.style.display = 'none'
+      tooltip.value.style.opacity = '0'
     }
+    
+    // Destroy popper instance
+    if (currentPopper) {
+      if (currentPopper.destroy) {
+        currentPopper.destroy()
+      }
+      currentPopper = null
+    }
+    
+    // Remove event listeners
+    cy?.off('pan zoom resize')
   })
 }
 
@@ -223,19 +300,25 @@ const destroyGraph = () => {
     clearTimeout(tooltipTimeout)
     tooltipTimeout = null
   }
+  if (currentPopper) {
+    if (currentPopper.destroy) {
+      currentPopper.destroy()
+    }
+    currentPopper = null
+  }
   if (cy) {
     cy.destroy()
     cy = null
   }
 }
 
-onMounted(() => {
-  initGraph()
+onMounted(async () => {
+  await initGraph()
 })
 
-watch(() => props.docs, () => {
+watch(() => props.docs, async () => {
   destroyGraph()
-  initGraph()
+  await initGraph()
 }, { deep: true })
 
 onBeforeUnmount(() => {
@@ -263,7 +346,6 @@ onBeforeUnmount(() => {
 }
 
 .graph-tooltip {
-  position: absolute;
   display: none;
   background-color: white;
   color: #2c3e50;
@@ -275,6 +357,35 @@ onBeforeUnmount(() => {
   z-index: 1000;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   border: 1px solid #dee2e6;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  position: relative;
+  overflow: visible;
+}
+
+.graph-tooltip[data-show] {
+  display: block;
+}
+
+.graph-tooltip-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid white;
+}
+
+.graph-tooltip[data-popper-placement^='bottom'] .graph-tooltip-arrow {
+  top: -8px;
+  bottom: auto;
+  border-top-color: transparent;
+  border-bottom: 8px solid white;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
 }
 
 .tooltip-ecli {

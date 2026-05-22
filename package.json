@@ -24,8 +24,10 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@popperjs/core": "^2.11.8",
     "@primeuix/themes": "^2.0.3",
     "cytoscape": "^3.33.4",
+    "cytoscape-popper": "^4.0.1",
     "legal-docs-client": "*",
     "primevue": "^4.5.5"
   },
