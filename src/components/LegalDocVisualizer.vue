@@ -1,10 +1,27 @@
 <template>
     <div class="legal-doc-visualizer">
-        <div v-if="mode == VisualizationMode.TABLE">
-            <Table :docs="docs" @row-click="handleDocClick" />
+        <div class="mode-switcher">
+            <button 
+                :class="['mode-btn', { active: currentMode === VisualizationMode.TABLE }]"
+                @click="currentMode = VisualizationMode.TABLE"
+            >
+                Table
+            </button>
+            <button 
+                :class="['mode-btn', { active: currentMode === VisualizationMode.GRAPH }]"
+                @click="currentMode = VisualizationMode.GRAPH"
+            >
+                Graph
+            </button>
         </div>
-        <div v-else-if="mode == VisualizationMode.GRAPH">
-            <Graph :docs="docs" @node-click="handleDocClick" />
+
+        <div class="content">
+            <div v-if="currentMode === VisualizationMode.TABLE" class="visualization-container">
+                <Table :docs="docs" @row-click="handleDocClick" />
+            </div>
+            <div v-else-if="currentMode === VisualizationMode.GRAPH" class="visualization-container">
+                <Graph :docs="docs" @node-click="handleDocClick" />
+            </div>
         </div>
 
         <DocumentInfo :document="selectedDocument" :docs="docs" v-model:visible="drawerVisible"
@@ -22,13 +39,13 @@ import Graph from './Graph.vue'
 
 export interface Props {
     docs?: LegalDocument[]
-    mode?: VisualizationMode
 }
 
 const props = defineProps<Props>();
 
 const selectedDocument = ref<any>(null)
 const drawerVisible = ref(false)
+const currentMode = ref(VisualizationMode.TABLE)
 
 const handleDocClick = async (doc: any) => {
     // If drawer is already open, close it briefly to ensure proper update
@@ -61,5 +78,51 @@ const handleCitationClick = async (ecli: string) => {
 .legal-doc-visualizer {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.mode-switcher {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    justify-content: center;
+}
+
+.mode-btn {
+    padding: 6px 16px;
+    border: 1px solid #dee2e6;
+    background-color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: #495057;
+    transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+    background-color: #f8f9fa;
+    border-color: #adb5bd;
+}
+
+.mode-btn.active {
+    background-color: #3498db;
+    color: white;
+    border-color: #3498db;
+}
+
+.content {
+    margin-top: 10px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.visualization-container {
+    width: 100%;
+    height: 100%;
 }
 </style>
