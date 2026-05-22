@@ -1,7 +1,8 @@
 import type { App } from 'vue'
 import LegalDocVisualizer from './components/LegalDocVisualizer.vue'
+import Graph from './components/Graph.vue'
 
-export { LegalDocVisualizer }
+export { LegalDocVisualizer, Graph }
 export type { LegalDocument } from 'legal-docs-client'
 
 export interface LegalDocsVisualizerPlugin {
@@ -11,6 +12,7 @@ export interface LegalDocsVisualizerPlugin {
 const plugin: LegalDocsVisualizerPlugin = {
   install: (app: App) => {
     app.component('LegalDocVisualizer', LegalDocVisualizer)
+    app.component('Graph', Graph)
   }
 }
 

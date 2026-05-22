@@ -4,16 +4,11 @@
             <Table :docs="docs" @row-click="handleRowClick" />
         </div>
         <div v-else-if="mode == VisualizationMode.GRAPH">
-                <!-- Placeholder for graph visualization -->
-                <p>Graph visualization coming soon...</p>
+            <Graph :docs="docs" @node-click="handleRowClick" />
         </div>
 
-        <DocumentInfo 
-            :document="selectedDocument" 
-            :docs="docs"
-            v-model:visible="drawerVisible" 
-            @citation-click="handleCitationClick"
-        />
+        <DocumentInfo :document="selectedDocument" :docs="docs" v-model:visible="drawerVisible"
+            @citation-click="handleCitationClick" />
     </div>
 </template>
 
@@ -23,6 +18,7 @@ import type { LegalDocument } from 'legal-docs-client'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
 import { VisualizationMode } from './types'
+import Graph from './Graph.vue'
 
 export interface Props {
     docs?: LegalDocument[]
