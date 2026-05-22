@@ -11,7 +11,7 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'LegalDocsVisualizer',
-      fileName: (format) => `legal-docs-visualizer.${format}.js`
+      fileName: (format) => `vue-legal-docs-visualizer.${format}.js`
     },
     rollupOptions: {
       external: ['vue'],
