@@ -1,10 +1,10 @@
 <template>
     <div class="legal-doc-visualizer">
         <div v-if="mode == VisualizationMode.TABLE">
-            <Table :docs="docs" @row-click="handleRowClick" />
+            <Table :docs="docs" @row-click="handleDocClick" />
         </div>
         <div v-else-if="mode == VisualizationMode.GRAPH">
-            <Graph :docs="docs" @node-click="handleRowClick" />
+            <Graph :docs="docs" @node-click="handleDocClick" />
         </div>
 
         <DocumentInfo :document="selectedDocument" :docs="docs" v-model:visible="drawerVisible"
@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import type { LegalDocument } from 'legal-docs-client'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
@@ -30,15 +30,28 @@ const props = defineProps<Props>();
 const selectedDocument = ref<any>(null)
 const drawerVisible = ref(false)
 
-const handleRowClick = (doc: any) => {
+const handleDocClick = async (doc: any) => {
+    // If drawer is already open, close it briefly to ensure proper update
+    if (drawerVisible.value) {
+        drawerVisible.value = false
+        await nextTick()
+    }
     selectedDocument.value = doc
+    await nextTick()
     drawerVisible.value = true
 }
 
-const handleCitationClick = (ecli: string) => {
+const handleCitationClick = async (ecli: string) => {
     const doc = props.docs?.find(d => d.id === ecli)
     if (doc) {
+        // If drawer is already open, close it briefly to ensure proper update
+        if (drawerVisible.value) {
+            drawerVisible.value = false
+            await nextTick()
+        }
         selectedDocument.value = doc
+        await nextTick()
+        drawerVisible.value = true
     }
 }
 
