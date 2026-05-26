@@ -106,14 +106,14 @@ const columns = [
   { field: 'decisionSummary', header: 'Decision Summary', sortable: true, style: 'min-width: 150px', type: 'default' },
   { field: 'timesCited', header: 'Times Cited', sortable: true, style: 'min-width: 120px', type: 'default' },
   { field: 'topic', header: 'Topic', sortable: true, style: 'min-width: 150px', type: 'default' },
-  { field: 'degree', header: 'Degree', sortable: true, style: 'min-width: 100px', type: 'default' },
-  { field: 'inDegree', header: 'In Degree', sortable: true, style: 'min-width: 100px', type: 'default' },
-  { field: 'outDegree', header: 'Out Degree', sortable: true, style: 'min-width: 100px', type: 'default' },
-  { field: 'degreeCentrality', header: 'Degree Centrality', sortable: true, style: 'min-width: 150px', type: 'default' },
-  { field: 'betweennessCentrality', header: 'Betweenness', sortable: true, style: 'min-width: 130px', type: 'default' },
-  { field: 'closenessCentrality', header: 'Closeness', sortable: true, style: 'min-width: 120px', type: 'default' },
-  { field: 'pageRank', header: 'PageRank', sortable: true, style: 'min-width: 120px', type: 'default' },
-  { field: 'community', header: 'Community', sortable: true, style: 'min-width: 120px', type: 'default' }
+  { field: 'degree', header: 'Degree', sortable: true, style: 'min-width: 100px', type: 'number', sortField: 'degreeValue' },
+  { field: 'inDegree', header: 'In Degree', sortable: true, style: 'min-width: 100px', type: 'number', sortField: 'inDegreeValue' },
+  { field: 'outDegree', header: 'Out Degree', sortable: true, style: 'min-width: 100px', type: 'number', sortField: 'outDegreeValue' },
+  { field: 'degreeCentrality', header: 'Degree Centrality', sortable: true, style: 'min-width: 150px', type: 'number', sortField: 'degreeCentralityValue' },
+  { field: 'betweennessCentrality', header: 'Betweenness', sortable: true, style: 'min-width: 130px', type: 'number', sortField: 'betweennessCentralityValue' },
+  { field: 'closenessCentrality', header: 'Closeness', sortable: true, style: 'min-width: 120px', type: 'number', sortField: 'closenessCentralityValue' },
+  { field: 'pageRank', header: 'PageRank', sortable: true, style: 'min-width: 120px', type: 'number', sortField: 'pageRankValue' },
+  { field: 'community', header: 'Community', sortable: true, style: 'min-width: 120px', type: 'number', sortField: 'communityValue' }
 ]
 
 const selectedRow = ref<any>(null)
@@ -192,6 +192,10 @@ const tableDocs = computed(() => {
       return String(val)
     }
     
+    const getNumValue = (val: any) => {
+      return (val !== null && val !== undefined && typeof val === 'number') ? val : null
+    }
+    
     return {
       ecli: doc.id || '-',
       date: dateDisplay,
@@ -205,13 +209,21 @@ const tableDocs = computed(() => {
       timesCited: Array.isArray(data.cited_by) ? data.cited_by.length : 0,
       topic: data.procedure_type || '-',
       degree: formatNumber(stats.degree),
+      degreeValue: getNumValue(stats.degree),
       inDegree: formatNumber(stats.inDegree),
+      inDegreeValue: getNumValue(stats.inDegree),
       outDegree: formatNumber(stats.outDegree),
+      outDegreeValue: getNumValue(stats.outDegree),
       degreeCentrality: formatNumber(stats.degreeCentrality),
+      degreeCentralityValue: getNumValue(stats.degreeCentrality),
       betweennessCentrality: formatNumber(stats.betweennessCentrality),
+      betweennessCentralityValue: getNumValue(stats.betweennessCentrality),
       closenessCentrality: formatNumber(stats.closenessCentrality),
+      closenessCentralityValue: getNumValue(stats.closenessCentrality),
       pageRank: formatNumber(stats.pageRank),
+      pageRankValue: getNumValue(stats.pageRank),
       community: formatNumber(stats.community),
+      communityValue: getNumValue(stats.community),
       fullTextUrl: data.url_publication || null
     }
   })
