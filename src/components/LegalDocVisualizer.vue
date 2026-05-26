@@ -17,10 +17,10 @@
 
         <div class="content">
             <div v-if="currentMode === VisualizationMode.TABLE" class="visualization-container">
-                <Table :docs="docs" @row-click="handleDocClick" />
+                <Table ref="refTableComponent" :docs="docs" @row-click="handleDocClick" />
             </div>
             <div v-else-if="currentMode === VisualizationMode.GRAPH" class="visualization-container">
-                <Graph :docs="docs" @node-click="handleDocClick" />
+                <Graph ref="refGraphComponent" :docs="docs" @node-click="handleDocClick" />
             </div>
         </div>
 
@@ -46,8 +46,13 @@ const props = defineProps<Props>();
 const selectedDocument = ref<any>(null)
 const drawerVisible = ref(false)
 const currentMode = ref(VisualizationMode.TABLE)
+const refGraphComponent = ref<InstanceType<typeof Graph> | null>(null)
+const refTableComponent = ref<InstanceType<typeof Table> | null>(null);
 
-const handleDocClick = async (doc: any) => {
+const handleDocClick = async (id: string) => {
+    const doc = props.docs?.find(d => d.id === id)
+    if (!doc) return
+
     // If drawer is already open, close it briefly to ensure proper update
     if (drawerVisible.value) {
         drawerVisible.value = false
@@ -58,17 +63,18 @@ const handleDocClick = async (doc: any) => {
     drawerVisible.value = true
 }
 
-const handleCitationClick = async (ecli: string) => {
-    const doc = props.docs?.find(d => d.id === ecli)
-    if (doc) {
-        // If drawer is already open, close it briefly to ensure proper update
-        if (drawerVisible.value) {
-            drawerVisible.value = false
-            await nextTick()
-        }
-        selectedDocument.value = doc
-        await nextTick()
-        drawerVisible.value = true
+const handleCitationClick = async (id: string) => {
+    handleDocClick(id)
+
+    switch(currentMode.value) {
+        case VisualizationMode.TABLE:
+            refTableComponent.value?.highlightRowById(id)
+            break
+        case VisualizationMode.GRAPH:
+            refGraphComponent.value?.highlightNodeById(id)
+            break
+        default:
+            break
     }
 }
 

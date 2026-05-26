@@ -39,6 +39,17 @@ const emit = defineEmits<{
   nodeClick: [doc: any]
 }>()
 
+const highlightNodeById = (id: string) => {
+  if (!cy) return
+  // Deselect all nodes first
+  cy.$('node').unselect()
+  const node = cy.$(`node[id="${id}"]`)
+  if (node && !node.isEdge()) {
+    cy.$(node).select()
+  }
+}
+
+
 const cyContainer = ref<HTMLElement | null>(null)
 const tooltip = ref<HTMLElement | null>(null)
 const tooltipContent = ref({ ecli: '', summary: '' })
@@ -147,9 +158,8 @@ const initGraph = async () => {
       {
         selector: 'node:selected',
         style: {
-          'background-color': '#e74c3c',
           'border-width': 3,
-          'border-color': '#c0392b'
+          'border-color': '#e74c3c'
         }
       }
     ],
@@ -176,9 +186,9 @@ const initGraph = async () => {
 
   // Add click event listener
   cy.on('tap', 'node', (event) => {
-    const node = event.target
-    const docData = node.data('fullData')
-    emit('nodeClick', docData)
+    const nodeId = event.target.data('id')
+    highlightNodeById(nodeId)
+    emit('nodeClick', nodeId)
   })
 
   // Add hover event listeners for tooltip
@@ -320,6 +330,10 @@ watch(() => props.docs, async () => {
   destroyGraph()
   await initGraph()
 }, { deep: true })
+
+defineExpose({
+  highlightNodeById
+})
 
 onBeforeUnmount(() => {
   destroyGraph()

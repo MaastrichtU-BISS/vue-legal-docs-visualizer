@@ -11,18 +11,23 @@
             <Button label="Export CSV" icon="pi pi-download" @click="exportCSV" size="small" />
         </div>
         
-        <DataTable :value="tableDocs" 
+        <DataTable ref="dataTable" 
+                   :value="tableDocs" 
                    tableStyle="min-width: 50rem" 
                    :paginator="true" 
                    :rows="10" 
                    scrollable 
                    scrollHeight="600px"
                    v-model:filters="filters"
+                   v-model:first="currentPage"
                    :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic']"
                    paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
                    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} documents"
                    @row-click="onRowClick"
-                   :rowHover="true">
+                   :rowHover="true"
+                   :selectionMode="'single'"
+                   v-model:selection="selectedRow"
+                   dataKey="ecli">
         
         <Column v-for="col in columns" 
                 :key="col.field" 
@@ -56,7 +61,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
@@ -79,6 +84,8 @@ const filters = ref({
   global: { value: '', matchMode: 'contains' }
 })
 
+const dataTable = ref<any>(null)
+
 // Column configuration
 const columns = [
   { field: 'ecli', header: 'ECLI', sortable: true, style: 'min-width: 200px', type: 'default' },
@@ -91,6 +98,45 @@ const columns = [
   { field: 'topic', header: 'Topic', sortable: true, style: 'min-width: 150px', type: 'default' },
   { field: 'fullTextUrl', header: 'Full Text', sortable: false, style: 'min-width: 120px', type: 'button', buttonText: 'View Text' }
 ]
+
+const selectedRow = ref<any>(null)
+const currentPage = ref(0)
+
+const highlightRowById = (ecli: string) => {
+  if (tableDocs.value) {
+    const row = tableDocs.value.find(r => r.ecli === ecli)
+    selectedRow.value = row || null
+    
+    if (row) {
+      // Find the page containing this row
+      const pageSize = 10
+      const rowIndex = tableDocs.value.findIndex(r => r.ecli === ecli)
+      if (rowIndex >= 0) {
+        currentPage.value = Math.floor(rowIndex / pageSize) * pageSize
+        
+        // Scroll to the row after pagination updates
+        nextTick(() => {
+          nextTick(() => {
+            // Find the scrollable container
+            const tableBody = dataTable.value?.$el?.querySelector('.p-datatable-tbody')
+            if (tableBody) {
+              // Find the row containing this ECLI
+              const rows = tableBody.querySelectorAll('tr')
+              for (const rowElement of rows) {
+                const cells = rowElement.querySelectorAll('td')
+                if (cells.length > 0 && cells[0].textContent?.includes(ecli)) {
+                  // Scroll the row into view within the scrollable container
+                  rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  break
+                }
+              }
+            }
+          })
+        })
+      }
+    }
+  }
+}
 
 // Simplified table data structure
 const tableDocs = computed(() => {
@@ -132,12 +178,9 @@ const tableDocs = computed(() => {
 
 // Handle row click - find and emit the original document
 const onRowClick = (event: any) => {
-  const clickedRow = event.data
-  // Find the original document by ECLI
-  const originalDoc = props.docs?.find(doc => doc.id === clickedRow.ecli)
-  if (originalDoc) {
-    emit('rowClick', originalDoc)
-  }
+  const nodeId = event.data.ecli
+  highlightRowById(nodeId)
+  emit('rowClick', nodeId)
 }
 
 // Open full text URL in new tab
@@ -148,7 +191,6 @@ const openFullText = (url: string) => {
 // Export table data as CSV
 const exportCSV = () => {
   if (tableDocs.value.length === 0) return
-  
   // Define headers
   const headers = columns.filter(col => col.type !== 'button').map(col => col.header)
   
@@ -182,6 +224,10 @@ const exportCSV = () => {
   link.click()
   document.body.removeChild(link)
 }
+
+defineExpose({
+  highlightRowById
+})
 
 </script>
 
