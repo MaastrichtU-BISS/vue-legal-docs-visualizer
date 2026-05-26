@@ -72,6 +72,19 @@
                 </ul>
             </div>
 
+            <!-- Statistics -->
+            <div class="info-section" v-if="document.data?.statistics">
+                <h3 class="section-title">Statistics</h3>
+                <div class="stats-list">
+                    <div class="info-field" v-for="(value, key) in document.data.statistics" :key="key">
+                        <template v-if="key != 'parent'">
+                            <span class="field-label">{{ formatStatKey(key) }}:</span>
+                            <span class="field-value">{{ formatStatValue(value) }}</span>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
             <!-- Citations -->
             <div class="info-section" v-if="document.data?.cites && document.data.cites.length > 0">
                 <h3 class="section-title">Cites ({{ document.data.cites.length }})</h3>
@@ -115,12 +128,13 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import type { LegalDocument } from 'legal-docs-client'
 import Drawer from 'primevue/drawer'
 
 export interface Props {
-    document?: any
+    document?: LegalDocument | null
     visible?: boolean
-    docs?: any[]
+    docs?: LegalDocument[]
 }
 
 const props = defineProps<Props>()
@@ -147,6 +161,28 @@ const isEcliInDocs = (ecli: string): boolean => {
 
 const handleCitationClick = (ecli: string) => {
     emit('citation-click', ecli)
+}
+
+const formatStatKey = (key: string): string => {
+    // Convert camelCase to Title Case with spaces
+    return key
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (str) => str.toUpperCase())
+        .trim()
+}
+
+const formatStatValue = (value: any): string => {
+    if (typeof value === 'number') {
+        // Format numbers with appropriate precision
+        if (value < 0.01 && value > 0) {
+            return value.toExponential(4)
+        } else if (value % 1 === 0) {
+            return value.toString()
+        } else {
+            return value.toFixed(4)
+        }
+    }
+    return String(value)
 }
 </script>
 
@@ -239,6 +275,12 @@ const handleCitationClick = (ecli: string) => {
     color: #374151;
     margin-bottom: 4px;
     line-height: 1.5;
+}
+
+.stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .publication-link {

@@ -47,7 +47,7 @@ export interface Props {
 
 const props = defineProps<Props>();
 
-const selectedDocument = ref<any>(null)
+const selectedDocument = ref<LegalDocument | null>(null)
 const drawerVisible = ref(false)
 const currentMode = ref(VisualizationMode.TABLE)
 const refGraphComponent = ref<InstanceType<typeof Graph> | null>(null)
