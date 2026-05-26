@@ -20,7 +20,7 @@
                    scrollHeight="600px"
                    v-model:filters="filters"
                    v-model:first="currentPage"
-                   :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic']"
+                   :globalFilterFields="['ecli', 'date', 'summary', 'instance', 'domain', 'decisionSummary', 'topic', 'degree', 'inDegree', 'outDegree', 'community']"
                    paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport"
                    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} documents"
                    @row-click="onRowClick"
@@ -37,8 +37,17 @@
                 :sortField="col.sortField"
                 :style="col.style">
             <template #body="{ data }">
+                <!-- Link type -->
+                <Button v-if="col.type === 'link' && data[col.field]" 
+                        @click="openFullText(data[col.field])"
+                        icon="pi pi-external-link"
+                        text
+                        rounded
+                        severity="secondary"
+                        size="small" />
+                
                 <!-- Button type -->
-                <Button v-if="col.type === 'button' && data[col.field]" 
+                <Button v-else-if="col.type === 'button' && data[col.field]" 
                         @click="openFullText(data[col.field])"
                         :label="col.buttonText"
                         size="small" />
@@ -88,6 +97,7 @@ const dataTable = ref<any>(null)
 
 // Column configuration
 const columns = [
+  { field: 'fullTextUrl', header: 'Full Text', sortable: false, style: 'min-width: 80px; text-align: center;', type: 'link' },
   { field: 'ecli', header: 'ECLI', sortable: true, style: 'min-width: 200px', type: 'default' },
   { field: 'date', header: 'Date', sortable: true, style: 'min-width: 120px', type: 'default', sortField: 'dateValue' },
   { field: 'summary', header: 'Summary', sortable: true, style: 'min-width: 300px', type: 'ellipsis', maxWidth: '300px' },
@@ -96,7 +106,14 @@ const columns = [
   { field: 'decisionSummary', header: 'Decision Summary', sortable: true, style: 'min-width: 150px', type: 'default' },
   { field: 'timesCited', header: 'Times Cited', sortable: true, style: 'min-width: 120px', type: 'default' },
   { field: 'topic', header: 'Topic', sortable: true, style: 'min-width: 150px', type: 'default' },
-  { field: 'fullTextUrl', header: 'Full Text', sortable: false, style: 'min-width: 120px', type: 'button', buttonText: 'View Text' }
+  { field: 'degree', header: 'Degree', sortable: true, style: 'min-width: 100px', type: 'default' },
+  { field: 'inDegree', header: 'In Degree', sortable: true, style: 'min-width: 100px', type: 'default' },
+  { field: 'outDegree', header: 'Out Degree', sortable: true, style: 'min-width: 100px', type: 'default' },
+  { field: 'degreeCentrality', header: 'Degree Centrality', sortable: true, style: 'min-width: 150px', type: 'default' },
+  { field: 'betweennessCentrality', header: 'Betweenness', sortable: true, style: 'min-width: 130px', type: 'default' },
+  { field: 'closenessCentrality', header: 'Closeness', sortable: true, style: 'min-width: 120px', type: 'default' },
+  { field: 'pageRank', header: 'PageRank', sortable: true, style: 'min-width: 120px', type: 'default' },
+  { field: 'community', header: 'Community', sortable: true, style: 'min-width: 120px', type: 'default' }
 ]
 
 const selectedRow = ref<any>(null)
@@ -159,6 +176,22 @@ const tableDocs = computed(() => {
       }
     }
     
+    // Extract statistics
+    const stats = data.statistics || {}
+    const formatNumber = (val: any) => {
+      if (val === null || val === undefined) return '-'
+      if (typeof val === 'number') {
+        if (val < 0.01 && val > 0) {
+          return val.toExponential(4)
+        } else if (val % 1 === 0) {
+          return val.toString()
+        } else {
+          return val.toFixed(4)
+        }
+      }
+      return String(val)
+    }
+    
     return {
       ecli: doc.id || '-',
       date: dateDisplay,
@@ -171,6 +204,14 @@ const tableDocs = computed(() => {
       decisionSummary: data.document_type || '-',
       timesCited: Array.isArray(data.cited_by) ? data.cited_by.length : 0,
       topic: data.procedure_type || '-',
+      degree: formatNumber(stats.degree),
+      inDegree: formatNumber(stats.inDegree),
+      outDegree: formatNumber(stats.outDegree),
+      degreeCentrality: formatNumber(stats.degreeCentrality),
+      betweennessCentrality: formatNumber(stats.betweennessCentrality),
+      closenessCentrality: formatNumber(stats.closenessCentrality),
+      pageRank: formatNumber(stats.pageRank),
+      community: formatNumber(stats.community),
       fullTextUrl: data.url_publication || null
     }
   })
@@ -192,14 +233,14 @@ const openFullText = (url: string) => {
 const exportCSV = () => {
   if (tableDocs.value.length === 0) return
   // Define headers
-  const headers = columns.filter(col => col.type !== 'button').map(col => col.header)
+  const headers = columns.filter(col => col.type !== 'button' && col.type !== 'link').map(col => col.header)
   
   // Create CSV content
   const csvContent = [
     headers.join(','),
     ...tableDocs.value.map(row => {
       return columns
-        .filter(col => col.type !== 'button')
+        .filter(col => col.type !== 'button' && col.type !== 'link')
         .map(col => {
           const value = (row as any)[col.field]
           // Escape quotes and wrap in quotes if contains comma or newline
