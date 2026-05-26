@@ -28,7 +28,7 @@
     "@primeuix/themes": "^2.0.3",
     "cytoscape": "^3.33.4",
     "cytoscape-popper": "^4.0.1",
-    "legal-docs-client": "*",
+    "legal-docs-client": "^0.3.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5"
   },
