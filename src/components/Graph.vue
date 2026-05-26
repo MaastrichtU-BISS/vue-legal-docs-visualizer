@@ -1,18 +1,32 @@
 <template>
-    <div class="graph-container">
-        <div ref="cyContainer" class="cy-container"></div>
-        <div ref="tooltip" class="graph-tooltip">
-            <div class="graph-tooltip-arrow"></div>
-            <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
-            <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
-        </div>
+  <div class="filter-bar">
+    <IconField>
+      <InputIcon>
+        <i class="pi pi-search" />
+      </InputIcon>
+      <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" />
+    </IconField>
+
+    <Button label="Reset" icon="pi pi-times" severity="secondary" size="small" @click="resetFilters" />
+  </div>
+  <div class="graph-container">
+    <div ref="cyContainer" class="cy-container"></div>
+    <div ref="tooltip" class="graph-tooltip">
+      <div class="graph-tooltip-arrow"></div>
+      <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
+      <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
     </div>
+  </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
 import cytoscape, { Core } from 'cytoscape'
 import { createPopper } from '@popperjs/core'
+import InputText from 'primevue/inputtext'
+import Button from 'primevue/button'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
 
 // Dynamically import and register cytoscape-popper
 let popperRegistered = false
@@ -21,10 +35,10 @@ const registerPopper = async () => {
   if (!popperRegistered) {
     const cytoscapePopper = await import('cytoscape-popper')
     const extension = cytoscapePopper.default
-    
+
     // Pass the createPopper factory to the extension
     cytoscape.use(extension(createPopper) as any)
-    
+
     popperRegistered = true
   }
 }
@@ -47,6 +61,49 @@ const highlightNodeById = (id: string) => {
   if (node && !node.isEdge()) {
     cy.$(node).select()
   }
+}
+
+// Filter state
+const searchQuery = ref('')
+
+const applyFilters = () => {
+  if (!cy) return
+
+  const searchLower = searchQuery.value.toLowerCase()
+  const nodes = cy.nodes()
+
+  // Determine which nodes should be visible
+  nodes.forEach(node => {
+    const docData = node.data('fullData')
+    const nodeId = node.data('id')
+
+    // Check search query
+    const matchesSearch = !searchLower ||
+      nodeId.toLowerCase().includes(searchLower) ||
+      (docData?.data?.summary || '').toLowerCase().includes(searchLower)
+
+    // Apply visibility
+    if (matchesSearch) {
+      node.style('display', 'element')
+    } else {
+      node.style('display', 'none')
+    }
+  })
+
+  // Also manage edge visibility
+  const edges = cy.edges()
+  edges.forEach(edge => {
+    if (edge.source().style('display') !== 'none' && edge.target().style('display') !== 'none') {
+      edge.style('display', 'element')
+    } else {
+      edge.style('display', 'none')
+    }
+  })
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  applyFilters()
 }
 
 
@@ -195,25 +252,25 @@ const initGraph = async () => {
   cy.on('mouseover', 'node', (event) => {
     const node = event.target
     const docData = node.data('fullData')
-    
+
     // Change cursor to pointer
     if (cyContainer.value) {
       cyContainer.value.style.cursor = 'pointer'
     }
-    
+
     // Change node color on hover
     node.style('background-color', '#2980b9')
-    
+
     // Clear any existing timeout
     if (tooltipTimeout) {
       clearTimeout(tooltipTimeout)
     }
-    
+
     tooltipContent.value = {
       ecli: docData.id || '',
       summary: docData.data?.summary || 'No summary available'
     }
-    
+
     // Show tooltip after a delay
     tooltipTimeout = setTimeout(() => {
       if (tooltip.value && node) {
@@ -251,17 +308,17 @@ const initGraph = async () => {
             ]
           }
         })
-        
+
         tooltip.value.style.display = 'block'
         tooltip.value.style.opacity = '1'
-        
+
         // Update popper position
         const update = () => {
           if (currentPopper && currentPopper.update) {
             currentPopper.update()
           }
         }
-        
+
         // Update on zoom/pan
         cy?.on('pan zoom resize', update)
       }
@@ -270,28 +327,28 @@ const initGraph = async () => {
 
   cy.on('mouseout', 'node', (event) => {
     const node = event.target
-    
+
     // Reset cursor
     if (cyContainer.value) {
       cyContainer.value.style.cursor = 'default'
     }
-    
+
     // Reset node color
     if (!node.selected()) {
       node.style('background-color', '#3498db')
     }
-    
+
     // Clear timeout and hide tooltip
     if (tooltipTimeout) {
       clearTimeout(tooltipTimeout)
       tooltipTimeout = null
     }
-    
+
     if (tooltip.value) {
       tooltip.value.style.display = 'none'
       tooltip.value.style.opacity = '0'
     }
-    
+
     // Destroy popper instance
     if (currentPopper) {
       if (currentPopper.destroy) {
@@ -299,7 +356,7 @@ const initGraph = async () => {
       }
       currentPopper = null
     }
-    
+
     // Remove event listeners
     cy?.off('pan zoom resize')
   })
@@ -332,7 +389,9 @@ watch(() => props.docs, async () => {
 }, { deep: true })
 
 defineExpose({
-  highlightNodeById
+  highlightNodeById,
+  applyFilters,
+  resetFilters
 })
 
 onBeforeUnmount(() => {
@@ -347,6 +406,19 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.filter-bar {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-bar :deep(.p-iconfield) {
+  flex: 1;
+  min-width: 250px;
 }
 
 .cy-container {
