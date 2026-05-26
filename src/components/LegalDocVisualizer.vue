@@ -1,18 +1,20 @@
 <template>
     <div class="legal-doc-visualizer">
         <div class="mode-switcher">
-            <button 
-                :class="['mode-btn', { active: currentMode === VisualizationMode.TABLE }]"
+            <Button 
+                icon="pi pi-table"
+                label="Table"
+                :class="{ active: currentMode === VisualizationMode.TABLE }"
                 @click="currentMode = VisualizationMode.TABLE"
-            >
-                Table
-            </button>
-            <button 
-                :class="['mode-btn', { active: currentMode === VisualizationMode.GRAPH }]"
+                severity="secondary"
+            />
+            <Button 
+                icon="pi pi-share-alt"
+                label="Graph"
+                :class="{ active: currentMode === VisualizationMode.GRAPH }"
                 @click="currentMode = VisualizationMode.GRAPH"
-            >
-                Graph
-            </button>
+                severity="secondary"
+            />
         </div>
 
         <div class="content">
@@ -32,6 +34,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import type { LegalDocument } from 'legal-docs-client'
+import Button from 'primevue/button'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
 import { VisualizationMode } from './types'
@@ -97,6 +100,20 @@ const handleCitationClick = async (id: string) => {
     border-bottom: 1px solid #dee2e6;
     background-color: #f8f9fa;
     justify-content: center;
+}
+
+.mode-switcher :deep(.p-button) {
+    padding: 8px 16px;
+}
+
+.mode-switcher .active {
+    background-color: #3498db !important;
+    color: white !important;
+    border-color: #3498db !important;
+}
+
+.mode-switcher .active :deep(.p-button-label) {
+    color: white !important;
 }
 
 .mode-btn {
