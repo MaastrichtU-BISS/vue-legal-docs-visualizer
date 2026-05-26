@@ -10,6 +10,29 @@
     <Button label="Reset" icon="pi pi-times" severity="secondary" size="small" @click="resetFilters" />
   </div>
   <div class="graph-container">
+    <div class="cy-controls">
+      <Button 
+        icon="pi pi-plus" 
+        severity="secondary" 
+        size="small" 
+        rounded 
+        @click="zoomIn"
+        v-tooltip="'Zoom In'" />
+      <Button 
+        icon="pi pi-minus" 
+        severity="secondary" 
+        size="small" 
+        rounded 
+        @click="zoomOut"
+        v-tooltip="'Zoom Out'" />
+      <Button 
+        icon="pi pi-arrows-alt" 
+        severity="secondary" 
+        size="small" 
+        rounded 
+        @click="fitToView"
+        v-tooltip="'Fit to View'" />
+    </div>
     <div ref="cyContainer" class="cy-container"></div>
     <div ref="tooltip" class="graph-tooltip">
       <div class="graph-tooltip-arrow"></div>
@@ -27,6 +50,8 @@ import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
+import { useToast } from 'primevue/usetoast'
+import Tooltip from 'primevue/tooltip'
 
 // Dynamically import and register cytoscape-popper
 let popperRegistered = false
@@ -104,6 +129,22 @@ const applyFilters = () => {
 const resetFilters = () => {
   searchQuery.value = ''
   applyFilters()
+}
+
+// Cytoscape controls
+const zoomIn = () => {
+  if (!cy) return
+  cy.zoom(cy.zoom() * 1.2)
+}
+
+const zoomOut = () => {
+  if (!cy) return
+  cy.zoom(cy.zoom() / 1.2)
+}
+
+const fitToView = () => {
+  if (!cy) return
+  cy.fit()
 }
 
 
@@ -492,5 +533,27 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 6;
   line-clamp: 6;
   -webkit-box-orient: vertical;
+}
+
+.cy-controls {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 6px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dee2e6;
+  z-index: 10;
+}
+
+.cy-controls :deep(.p-button) {
+  padding: 0.15rem 0.15rem;
+}
+
+.cy-controls :deep(.p-button-icon) {
+  font-size: 10px;
 }
 </style>
