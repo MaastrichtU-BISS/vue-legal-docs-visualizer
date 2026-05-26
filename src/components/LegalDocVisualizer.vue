@@ -36,6 +36,7 @@ import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
 import { VisualizationMode } from './types'
 import Graph from './Graph.vue'
+import 'primeicons/primeicons.css'
 
 export interface Props {
     docs?: LegalDocument[]

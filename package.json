@@ -29,6 +29,7 @@
     "cytoscape": "^3.33.4",
     "cytoscape-popper": "^4.0.1",
     "legal-docs-client": "*",
+    "primeicons": "^7.0.0",
     "primevue": "^4.5.5"
   },
   "peerDependencies": {
