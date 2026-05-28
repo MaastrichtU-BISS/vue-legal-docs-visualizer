@@ -1,6 +1,6 @@
 {
   "name": "vue-legal-docs-visualizer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A Vue component library for visualizing legal documents",
   "type": "module",
   "main": "./dist/vue-legal-docs-visualizer.umd.js",
