@@ -50,6 +50,14 @@
     "documents",
     "visualizer"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaastrichtU-BISS/vue-legal-docs-visualizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MaastrichtU-BISS/vue-legal-docs-visualizer/issues"
+  },
+  "homepage": "https://github.com/MaastrichtU-BISS/vue-legal-docs-visualizer#readme",
   "author": "",
   "license": "MIT"
 }
