@@ -31,6 +31,29 @@ const legalDocs: LegalDocument[] = [
 </script>
 ```
 
+### Global Installation (Optional)
+
+If you want to use the components globally without importing them in each file:
+
+```typescript
+import { createApp } from 'vue'
+import LegalDocsVisualizerPlugin from 'vue-legal-docs-visualizer'
+import 'vue-legal-docs-visualizer/style.css'
+import App from './App.vue'
+
+const app = createApp(App)
+app.use(LegalDocsVisualizerPlugin)
+app.mount('#app')
+```
+
+Then use it anywhere in your app:
+
+```vue
+<template>
+  <LegalDocVisualizer :docs="legalDocs" />
+</template>
+```
+
 ## Data Source
 
 This library expects data in the format provided by [`legal-docs-client`](https://www.npmjs.com/package/legal-docs-client), which provides structured legal document data with:
