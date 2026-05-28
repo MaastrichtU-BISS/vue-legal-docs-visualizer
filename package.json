@@ -21,7 +21,8 @@
     "dev": "vite",
     "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
     "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",

@@ -95,8 +95,19 @@ const filters = ref({
 
 const dataTable = ref<any>(null)
 
+interface Column {
+  field: string
+  header: string
+  sortable: boolean
+  style: string
+  type: string
+  sortField?: string
+  maxWidth?: string
+  buttonText?: string
+}
+
 // Column configuration
-const columns = [
+const columns: Column[] = [
   { field: 'fullTextUrl', header: 'Full Text', sortable: false, style: 'min-width: 80px; text-align: center;', type: 'link' },
   { field: 'ecli', header: 'ECLI', sortable: true, style: 'min-width: 200px', type: 'default' },
   { field: 'date', header: 'Date', sortable: true, style: 'min-width: 120px', type: 'default', sortField: 'dateValue' },
