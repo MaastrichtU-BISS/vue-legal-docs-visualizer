@@ -10,6 +10,13 @@
     <Button label="Reset" icon="pi pi-times" severity="secondary" size="small" @click="resetFilters" />
   </div>
   <div class="graph-container">
+    <div v-if="isLoading" class="graph-loading">
+      <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+      <p><strong>{{ layoutInfo.nodeCount }}</strong> nodes · <strong>{{ layoutInfo.iterations }}</strong> iterations</p>
+      <p style="font-size: 0.85rem; color: #6c757d;">
+        {{ layoutInfo.iterations < 100 ? 'Optimizing layout...' : layoutInfo.iterations < 500 ? 'Fast layout mode' : 'High quality layout' }}
+      </p>
+    </div>
     <div class="cy-controls">
       <Button 
         icon="pi pi-plus" 
@@ -43,7 +50,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
 import cytoscape, { Core } from 'cytoscape'
 import { createPopper } from '@popperjs/core'
 import InputText from 'primevue/inputtext'
@@ -75,6 +82,24 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   nodeClick: [doc: any]
 }>()
+
+const isLoading = ref(false)
+
+// Helper function to calculate iteration count based on node count
+const getIterationsForNodeCount = (nodeCount: number): number => {
+  if (nodeCount < 100) return 1000
+  if (nodeCount < 300) return 500
+  if (nodeCount < 500) return 200
+  if (nodeCount < 1000) return 100
+  if (nodeCount < 2000) return 50
+  return 30
+}
+
+const layoutInfo = computed(() => {
+  const nodeCount = props.docs?.length || 0
+  const iterations = getIterationsForNodeCount(nodeCount)
+  return { nodeCount, iterations }
+})
 
 const highlightNodeById = (id: string) => {
   if (!cy) return
@@ -154,7 +179,12 @@ let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
 
 const initGraph = async () => {
-  if (!cyContainer.value || !props.docs || props.docs.length === 0) return
+  if (!cyContainer.value || !props.docs || props.docs.length === 0) {
+    isLoading.value = false
+    return
+  }
+
+  isLoading.value = true
 
   // Register popper extension first
   await registerPopper()
@@ -219,6 +249,70 @@ const initGraph = async () => {
     }
   })
 
+  // Progressive layout optimization based on graph size
+  // The COSE algorithm complexity is O(iterations × nodes²)
+  // We scale down iterations, repulsion, and elasticity as graphs grow
+  const nodeCount = nodes.length
+  const numIter = getIterationsForNodeCount(nodeCount)
+  
+  let nodeRepulsion: number
+  let edgeElasticity: number
+  let coolingFactor: number
+  
+  if (nodeCount < 100) {
+    // Small graphs: High quality
+    nodeRepulsion = 400000
+    edgeElasticity = 100
+    coolingFactor = 0.95
+  } else if (nodeCount < 300) {
+    // Medium graphs: Good quality
+    nodeRepulsion = 300000
+    edgeElasticity = 80
+    coolingFactor = 0.93
+  } else if (nodeCount < 500) {
+    // Large graphs: Balanced
+    nodeRepulsion = 250000
+    edgeElasticity = 60
+    coolingFactor = 0.90
+  } else if (nodeCount < 1000) {
+    // Very large graphs: Performance focus
+    nodeRepulsion = 200000
+    edgeElasticity = 50
+    coolingFactor = 0.88
+  } else if (nodeCount < 2000) {
+    // Huge graphs: Minimal iterations
+    nodeRepulsion = 150000
+    edgeElasticity = 40
+    coolingFactor = 0.85
+  } else {
+    // Massive graphs: Ultra-fast
+    nodeRepulsion = 100000
+    edgeElasticity = 30
+    coolingFactor = 0.80
+  }
+
+  const layoutConfig = {
+    name: 'cose',
+    animate: false,
+    idealEdgeLength: 100,
+    nodeOverlap: 20,
+    refresh: 20,
+    fit: true,
+    padding: 30,
+    randomize: false,
+    componentSpacing: 100,
+    nodeRepulsion,
+    edgeElasticity,
+    nestingFactor: 5,
+    gravity: 80,
+    numIter,
+    initialTemp: 200,
+    coolingFactor,
+    minTemp: 1.0
+  }
+
+  console.log(`Graph rendering: ${nodeCount} nodes with ${numIter} iterations`)
+
   // Initialize cytoscape
   cy = cytoscape({
     container: cyContainer.value,
@@ -259,25 +353,7 @@ const initGraph = async () => {
         }
       }
     ],
-    layout: {
-      name: 'cose',
-      animate: false,
-      idealEdgeLength: 100,
-      nodeOverlap: 20,
-      refresh: 20,
-      fit: true,
-      padding: 30,
-      randomize: false,
-      componentSpacing: 100,
-      nodeRepulsion: 400000,
-      edgeElasticity: 100,
-      nestingFactor: 5,
-      gravity: 80,
-      numIter: 1000,
-      initialTemp: 200,
-      coolingFactor: 0.95,
-      minTemp: 1.0
-    }
+    layout: layoutConfig
   })
 
   // Add click event listener
@@ -399,6 +475,9 @@ const initGraph = async () => {
     // Remove event listeners
     cy?.off('pan zoom resize')
   })
+
+  // Graph rendering complete
+  isLoading.value = false
 }
 
 const destroyGraph = () => {
@@ -553,5 +632,30 @@ onBeforeUnmount(() => {
 
 .cy-controls :deep(.p-button-icon) {
   font-size: 10px;
+}
+
+.graph-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  min-width: 250px;
+  text-align: center;
+}
+
+.graph-loading p {
+  margin: 0;
+  color: #495057;
+  font-size: 0.95rem;
 }
 </style>
