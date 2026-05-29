@@ -17,19 +17,19 @@
     </div>
     <div class="cy-controls">
       <Button 
+        icon="pi pi-minus" 
+        severity="secondary" 
+        size="small"
+        rounded 
+        @click="zoomOut"
+        v-tooltip="'Zoom Out'" />
+      <Button 
         icon="pi pi-plus" 
         severity="secondary" 
         size="small" 
         rounded 
         @click="zoomIn"
         v-tooltip="'Zoom In'" />
-      <Button 
-        icon="pi pi-minus" 
-        severity="secondary" 
-        size="small" 
-        rounded 
-        @click="zoomOut"
-        v-tooltip="'Zoom Out'" />
       <Button 
         icon="pi pi-arrows-alt" 
         severity="secondary" 
