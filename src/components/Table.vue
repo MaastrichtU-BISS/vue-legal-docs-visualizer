@@ -85,7 +85,7 @@ export interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  rowClick: [doc: any]
+  docClick: [doc: any]
 }>()
 
 // Initialize filters
@@ -244,7 +244,7 @@ const tableDocs = computed(() => {
 const onRowClick = (event: any) => {
   const nodeId = event.data.ecli
   highlightRowById(nodeId)
-  emit('rowClick', nodeId)
+  emit('docClick', nodeId)
 }
 
 // Open full text URL in new tab

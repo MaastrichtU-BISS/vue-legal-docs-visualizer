@@ -80,7 +80,7 @@ export interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  nodeClick: [doc: any]
+  docClick: [doc: any]
 }>()
 
 const isLoading = ref(false)
@@ -360,7 +360,7 @@ const initGraph = async () => {
   cy.on('tap', 'node', (event) => {
     const nodeId = event.target.data('id')
     highlightNodeById(nodeId)
-    emit('nodeClick', nodeId)
+    emit('docClick', nodeId)
   })
 
   // Add hover event listeners for tooltip

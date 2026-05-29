@@ -18,12 +18,15 @@
         </div>
 
         <div class="content">
-            <div v-if="currentMode === VisualizationMode.TABLE" class="visualization-container">
-                <Table ref="refTableComponent" :docs="docs" @row-click="handleDocClick" />
-            </div>
-            <div v-else-if="currentMode === VisualizationMode.GRAPH" class="visualization-container">
-                <Graph ref="refGraphComponent" :docs="docs" @node-click="handleDocClick" />
-            </div>
+            <KeepAlive>
+                <component 
+                    :is="currentMode === VisualizationMode.TABLE ? Table : Graph"
+                    ref="currentComponentRef"
+                    :docs="docs"
+                    @doc-click="handleDocClick"
+                    class="visualization-container"
+                />
+            </KeepAlive>
         </div>
 
         <DocumentInfo :document="selectedDocument" :docs="docs" v-model:visible="drawerVisible"
@@ -32,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, computed } from 'vue'
 import type { LegalDocument } from 'legal-docs-client'
 import Button from 'primevue/button'
 import Table from './Table.vue'
@@ -50,8 +53,15 @@ const props = defineProps<Props>();
 const selectedDocument = ref<LegalDocument | null>(null)
 const drawerVisible = ref(false)
 const currentMode = ref(VisualizationMode.TABLE)
-const refGraphComponent = ref<InstanceType<typeof Graph> | null>(null)
-const refTableComponent = ref<InstanceType<typeof Table> | null>(null);
+const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | null>(null)
+
+const refGraphComponent = computed(() => {
+    return currentMode.value === VisualizationMode.GRAPH ? currentComponentRef.value as InstanceType<typeof Graph> : null
+})
+
+const refTableComponent = computed(() => {
+    return currentMode.value === VisualizationMode.TABLE ? currentComponentRef.value as InstanceType<typeof Table> : null
+})
 
 const handleDocClick = async (id: string) => {
     const doc = props.docs?.find(d => d.id === id)
