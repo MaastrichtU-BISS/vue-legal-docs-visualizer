@@ -6,8 +6,6 @@
       </InputIcon>
       <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" />
     </IconField>
-
-    <Button label="Reset" icon="pi pi-times" severity="secondary" size="small" @click="resetFilters" />
   </div>
   <div class="graph-container">
     <div v-if="isLoading" class="graph-loading">
@@ -147,11 +145,6 @@ const applyFilters = () => {
       edge.style('display', 'none')
     }
   })
-}
-
-const resetFilters = () => {
-  searchQuery.value = ''
-  applyFilters()
 }
 
 // Cytoscape controls
@@ -508,8 +501,7 @@ watch(() => props.docs, async () => {
 
 defineExpose({
   highlightNodeById,
-  applyFilters,
-  resetFilters
+  applyFilters
 })
 
 onBeforeUnmount(() => {
