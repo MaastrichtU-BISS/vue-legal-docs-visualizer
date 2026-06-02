@@ -406,7 +406,7 @@ const initGraph = async () => {
         selector: 'node:selected',
         style: {
           'border-width': 3,
-          'border-color': '#e74c3c'
+          'border-color': '#000000'
         }
       }
     ],
