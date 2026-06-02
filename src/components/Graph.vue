@@ -52,29 +52,30 @@
         <i class="pi pi-info-circle" 
            v-tooltip.top="'Toggle selection mode to select multiple documents by clicking them or drawing rectangles'"
            style="font-size: 0.75rem; color: #6c757d; cursor: help;"></i>
-        <span class="selection-label">{{ selectedCount }} document(s) selected. total {{ totalCount }}</span>
+        <span class="selection-label"> Selected Documents: {{ selectedCount }}/{{ totalCount }}</span>
       </div>
-      <div class="selection-buttons">
+      <div class="selection-mode">
+        <div class="mode-switch">
+          <label for="selection-mode-switch" style="font-size: 0.75rem; margin-right: 8px;">View</label>
+          <InputSwitch 
+            id="selection-mode-switch"
+            v-model="selectionMode" 
+            v-tooltip.top="'Toggle between View and Selection modes'" />
+          <label for="selection-mode-switch" style="font-size: 0.75rem; margin-left: 8px;">Selection</label>
+        </div>
+      </div>
+      <div class="selection-actions">
         <Button 
-          :icon="selectionMode ? 'pi pi-check' : 'pi pi-cursor'"
-          :label="selectionMode ? 'Selection Mode' : 'View Mode'"
-          :severity="selectionMode ? 'success' : 'secondary'"
-          size="small"
-          @click="selectionMode = !selectionMode"
-          v-tooltip.top="'Toggle Selection Mode'" />
-        <Button 
-          icon="pi pi-filter" 
-          severity="secondary" 
-          size="small"
-          text
+          icon="pi pi-filter"
+          label="Filter"
+          severity="primary" 
           :disabled="selectedCount === 0"
           @click="filterSelected"
           v-tooltip.top="'Filter Selected Documents'" />
-        <Button 
-          icon="pi pi-times" 
+        <Button  
+          icon="pi pi-times"
           severity="secondary" 
-          size="small"
-          text
+          label="Clear"
           :disabled="selectedCount === 0"
           @click="clearSelection"
           v-tooltip.top="'Clear Selection'" />
@@ -89,6 +90,7 @@ import cytoscape, { Core } from 'cytoscape'
 import { createPopper } from '@popperjs/core'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
+import InputSwitch from 'primevue/inputswitch'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 
@@ -846,14 +848,14 @@ onBeforeUnmount(() => {
   right: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
   background-color: rgba(255, 255, 255, 0.95);
   padding: 10px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   border: 1px solid #dee2e6;
   z-index: 10;
-  min-width: 280px;
+  min-width: 200px;
 }
 
 .selection-info {
@@ -871,17 +873,31 @@ onBeforeUnmount(() => {
   text-align: right;
 }
 
-.selection-buttons {
+.selection-mode {
   display: flex;
-  gap: 4px;
-  justify-content: flex-end;
+  justify-content: center;
+  padding: 4px 0;
 }
 
-.selection-buttons :deep(.p-button) {
+.selection-actions {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  justify-content: center;
+}
+
+.mode-switch {
+  display: flex;
+  align-items: center;
   padding: 0.25rem 0.5rem;
 }
 
-.selection-buttons :deep(.p-button-icon) {
-  font-size: 0.875rem;
+.selection-actions :deep(.p-button) {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.selection-actions :deep(.p-button-icon) {
+  font-size: 0.75rem;
 }
 </style>
