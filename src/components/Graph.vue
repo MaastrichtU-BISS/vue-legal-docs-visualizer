@@ -692,7 +692,7 @@ onBeforeUnmount(() => {
 
 .cy-controls {
   position: absolute;
-  bottom: 12px;
+  top: 12px;
   right: 12px;
   display: flex;
   gap: 4px;
