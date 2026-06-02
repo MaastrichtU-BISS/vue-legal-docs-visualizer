@@ -217,10 +217,26 @@ const initGraph = async () => {
   // Color for isolated nodes (degree = 0)
   const isolatedNodeColor = '#95a5a6' // Gray color for isolated nodes
 
-  // Create nodes from docs with color based on parent or isolation
+  // Helper function to calculate node size based on degree
+  const calculateNodeSize = (degree: number): number => {
+    // Base size for isolated nodes
+    if (degree === 0) return 20
+    
+    // Logarithmic scaling for better visual distribution
+    // Size ranges from 30px to 80px
+    const minSize = 30
+    const maxSize = 80
+    const scaleFactor = 15
+    
+    const size = minSize + Math.log(degree + 1) * scaleFactor
+    return Math.min(size, maxSize)
+  }
+
+  // Create nodes from docs with color and size based on parent or isolation
   const nodes = props.docs.map(doc => {
     const degree = doc.data?.statistics?.degree || 0
     const isIsolated = degree === 0
+    const size = calculateNodeSize(degree)
     
     let color: string
     if (isIsolated) {
@@ -235,7 +251,8 @@ const initGraph = async () => {
         id: doc.id,
         label: doc.id.split(':').pop() || doc.id, // Simplified label
         fullData: doc,
-        color: color // Store color in node data
+        color: color, // Store color in node data
+        size: size // Store size in node data
       }
     }
   })
@@ -364,8 +381,8 @@ const initGraph = async () => {
         selector: 'node',
         style: {
           'background-color': 'data(color)', // Use color from node data
-          'width': '40px',
-          'height': '40px'
+          'width': 'data(size)', // Use size from node data
+          'height': 'data(size)'
         }
       },
       {
