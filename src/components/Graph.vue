@@ -49,9 +49,10 @@
     </div>
     <div class="selection-controls">
       <div class="selection-info">
-        <i class="pi pi-info-circle" 
-           v-tooltip.top="'Toggle selection mode to select multiple documents by clicking them or drawing rectangles'"
-           style="font-size: 0.75rem; color: #6c757d; cursor: help;"></i>
+        <span v-tooltip="{ value: 'View Mode: Click nodes to view details. \n\nSelection Mode: Click/drag to select multiple nodes (panning disabled).', pt: { root: { style: 'max-width: 250px' } } }">
+          <i class="pi pi-info-circle" 
+             style="font-size: 0.75rem; color: #6c757d; cursor: pointer;"></i>
+        </span>
         <span class="selection-label"> Selected Documents: {{ selectedCount }}/{{ totalCount }}</span>
       </div>
       <div class="selection-mode">
@@ -59,8 +60,7 @@
           <label for="selection-mode-switch" style="font-size: 0.75rem; margin-right: 8px;">View</label>
           <InputSwitch 
             id="selection-mode-switch"
-            v-model="selectionMode" 
-            v-tooltip.top="'Toggle between View and Selection modes'" />
+            v-model="selectionMode" />
           <label for="selection-mode-switch" style="font-size: 0.75rem; margin-left: 8px;">Selection</label>
         </div>
       </div>
@@ -71,14 +71,13 @@
           severity="primary" 
           :disabled="selectedCount === 0"
           @click="filterSelected"
-          v-tooltip.top="'Filter Selected Documents'" />
+          v-tooltip="'Filter Selected Documents'" />
         <Button  
           icon="pi pi-times"
           severity="secondary" 
           label="Clear"
           :disabled="selectedCount === 0"
-          @click="clearSelection"
-          v-tooltip.top="'Clear Selection'" />
+          @click="clearSelection" />
       </div>
     </div>
   </div>
@@ -856,6 +855,11 @@ onBeforeUnmount(() => {
   border: 1px solid #dee2e6;
   z-index: 10;
   min-width: 200px;
+  pointer-events: auto;
+}
+
+.selection-controls :deep(.p-tooltip) {
+  z-index: 9999 !important;
 }
 
 .selection-info {
@@ -864,6 +868,10 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid #dee2e6;
+}
+
+.selection-info i {
+  pointer-events: auto;
 }
 
 .selection-label {
