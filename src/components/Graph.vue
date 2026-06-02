@@ -47,6 +47,39 @@
       </ul>
       <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
     </div>
+    <div class="selection-controls">
+      <div class="selection-info">
+        <i class="pi pi-info-circle" 
+           v-tooltip.top="'Toggle selection mode to select multiple documents by clicking them or drawing rectangles'"
+           style="font-size: 0.75rem; color: #6c757d; cursor: help;"></i>
+        <span class="selection-label">{{ selectedCount }} document(s) selected. total {{ totalCount }}</span>
+      </div>
+      <div class="selection-buttons">
+        <Button 
+          :icon="selectionMode ? 'pi pi-check' : 'pi pi-cursor'"
+          :label="selectionMode ? 'Selection Mode' : 'View Mode'"
+          :severity="selectionMode ? 'success' : 'secondary'"
+          size="small"
+          @click="selectionMode = !selectionMode"
+          v-tooltip.top="'Toggle Selection Mode'" />
+        <Button 
+          icon="pi pi-filter" 
+          severity="secondary" 
+          size="small"
+          text
+          :disabled="selectedCount === 0"
+          @click="filterSelected"
+          v-tooltip.top="'Filter Selected Documents'" />
+        <Button 
+          icon="pi pi-times" 
+          severity="secondary" 
+          size="small"
+          text
+          :disabled="selectedCount === 0"
+          @click="clearSelection"
+          v-tooltip.top="'Clear Selection'" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -85,6 +118,10 @@ const emit = defineEmits<{
 }>()
 
 const isLoading = ref(false)
+const selectedCount = ref(0)
+const selectionMode = ref(false)
+
+const totalCount = computed(() => props.docs?.length || 0)
 
 // Helper function to calculate iteration count based on node count
 const getIterationsForNodeCount = (nodeCount: number): number => {
@@ -104,11 +141,10 @@ const layoutInfo = computed(() => {
 
 const highlightNodeById = (id: string) => {
   if (!cy) return
-  // Deselect all nodes first
-  cy.$('node').unselect()
   const node = cy.$(`node[id="${id}"]`)
   if (node && !node.isEdge()) {
-    cy.$(node).select()
+    cy.$('.currentShown').removeClass('currentShown')
+    cy.$(node).addClass('currentShown')
   }
 }
 
@@ -166,6 +202,30 @@ const fitToView = () => {
   cy.fit()
 }
 
+const filterSelected = () => {
+  if (!cy) return
+  const selectedNodes = cy.$('node:selected')
+  
+  if (selectedNodes.length === 0) return
+  
+  // Get the selected node IDs
+  const selectedIds = selectedNodes.map(node => node.data('id'))
+  
+  // TODO: User will implement the filtering logic
+  console.log('Selected nodes:', selectedIds)
+}
+
+const clearSelection = () => {
+  if (!cy) return
+  const selectedNodes = cy.$('node:selected')
+  selectedNodes.unselect()
+  selectedCount.value = 0
+}
+
+const updateSelectionCount = () => {
+  if (!cy) return
+  selectedCount.value = cy.$('node:selected').length
+}
 
 const cyContainer = ref<HTMLElement | null>(null)
 const tooltip = ref<HTMLElement | null>(null)
@@ -255,7 +315,7 @@ const initGraph = async () => {
         label: doc.id.split(':').pop() || doc.id, // Simplified label
         fullData: doc,
         color: color, // Store color in node data
-        size: size // Store size in node data
+        size: size, // Store size in node data
       }
     }
   })
@@ -370,8 +430,6 @@ const initGraph = async () => {
     minTemp: 1.0
   }
 
-  console.log(`Graph rendering: ${nodeCount} nodes with ${numIter} iterations`)
-
   // Initialize cytoscape
   cy = cytoscape({
     container: cyContainer.value,
@@ -379,6 +437,11 @@ const initGraph = async () => {
       nodes,
       edges
     },
+    selectionType: 'additive',
+    boxSelectionEnabled: false, // Controlled by selectionMode
+    userPanningEnabled: true, // Controlled by selectionMode
+    autoungrabify: false,
+    autounselectify: true, // Controlled by selectionMode
     style: [
       {
         selector: 'node',
@@ -386,6 +449,22 @@ const initGraph = async () => {
           'background-color': 'data(color)', // Use color from node data
           'width': 'data(size)', // Use size from node data
           'height': 'data(size)'
+        }
+      },
+      {
+        selector: 'node:selected',
+        style: {
+          'background-color': '#000000',
+          'border-width': 0,
+          'opacity': 1
+        }
+      },
+      {
+        selector: 'node.currentShown',
+        style: {
+          'border-width': 3,
+          'border-color': '#000000',
+          'border-style': 'solid'
         }
       },
       {
@@ -404,23 +483,31 @@ const initGraph = async () => {
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier'
         }
-      },
-      {
-        selector: 'node:selected',
-        style: {
-          'border-width': 3,
-          'border-color': '#000000'
-        }
       }
     ],
     layout: layoutConfig
   })
 
-  // Add click event listener
+  // Handle node clicks based on mode
   cy.on('tap', 'node', (event) => {
-    const nodeId = event.target.data('id')
-    highlightNodeById(nodeId)
-    emit('docClick', nodeId)
+    const node = event.target
+    const nodeId = node.data('id')
+    
+    if (!selectionMode.value) {
+      cy.$('.currentShown').removeClass('currentShown')
+      node.addClass('currentShown')
+      emit('docClick', nodeId)
+    }
+    // If selectionMode is true, Cytoscape handles selection automatically
+  })
+
+  // Add selection event listeners to update count
+  cy.on('select', 'node', () => {
+    updateSelectionCount()
+  })
+
+  cy.on('unselect', 'node', () => {
+    updateSelectionCount()
   })
 
   // Add hover event listeners for tooltip
@@ -433,10 +520,10 @@ const initGraph = async () => {
       cyContainer.value.style.cursor = 'pointer'
     }
 
-    // Darken node color on hover (reduce opacity slightly)
-    const originalColor = node.data('color')
-    node.style('background-color', originalColor)
-    node.style('opacity', 0.7)
+    // Darken node color on hover only if not selected
+    if (!node.selected()) {
+      node.style('opacity', 0.7)
+    }
 
     // Clear any existing timeout
     if (tooltipTimeout) {
@@ -511,10 +598,8 @@ const initGraph = async () => {
       cyContainer.value.style.cursor = 'default'
     }
 
-    // Reset node color and opacity
+    // Reset node opacity only if not selected
     if (!node.selected()) {
-      const originalColor = node.data('color')
-      node.style('background-color', originalColor)
       node.style('opacity', 1)
     }
 
@@ -570,6 +655,24 @@ watch(() => props.docs, async () => {
   destroyGraph()
   await initGraph()
 }, { deep: true })
+
+// Watch selectionMode and update Cytoscape accordingly
+watch(selectionMode, (enabled) => {
+  if (!cy) return
+  
+  if (enabled) {
+    // Enable selection mode: allow selection, disable panning
+    cy.$('.currentShown').removeClass('currentShown')
+    cy.autounselectify(false)
+    cy.boxSelectionEnabled(true)
+    cy.userPanningEnabled(false)
+  } else {
+    cy.$('node').unselect()
+    cy.autounselectify(true)
+    cy.boxSelectionEnabled(false)
+    cy.userPanningEnabled(true)
+  }
+})
 
 defineExpose({
   highlightNodeById,
@@ -735,5 +838,50 @@ onBeforeUnmount(() => {
   margin: 0;
   color: #495057;
   font-size: 0.95rem;
+}
+
+.selection-controls {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dee2e6;
+  z-index: 10;
+  min-width: 280px;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.selection-label {
+  font-size: 0.75rem;
+  color: #495057;
+  flex: 1;
+  text-align: right;
+}
+
+.selection-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.selection-buttons :deep(.p-button) {
+  padding: 0.25rem 0.5rem;
+}
+
+.selection-buttons :deep(.p-button-icon) {
+  font-size: 0.875rem;
 }
 </style>
