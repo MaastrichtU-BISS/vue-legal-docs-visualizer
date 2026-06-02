@@ -94,9 +94,15 @@ const handleCitationClick = async (id: string) => {
 
 </script>
 
-<style scoped>
+<style>
+/* Non-scoped to apply font-family globally within component */
 .legal-doc-visualizer {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+</style>
+
+<style scoped>
+.legal-doc-visualizer {
     font-size: 14px;
     display: flex;
     flex-direction: column;

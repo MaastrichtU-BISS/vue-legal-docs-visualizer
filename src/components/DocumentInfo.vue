@@ -186,6 +186,13 @@ const formatStatValue = (value: any): string => {
 }
 </script>
 
+<style>
+/* Non-scoped to apply to PrimeVue Drawer which renders outside component tree */
+.document-drawer {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+</style>
+
 <style scoped>
 .document-drawer {
     width: 1000px;
