@@ -171,6 +171,25 @@ let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
 
+// Helper function to generate distinct colors for clusters
+const generateClusterColors = (parentIds: string[]): Map<string, string> => {
+  const colorMap = new Map<string, string>()
+  const distinctColors = [
+    '#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+    '#1abc9c', '#e67e22', '#d35400', '#c0392b', '#16a085',
+    '#27ae60', '#2980b9', '#8e44ad', '#f1c40f', '#e84393',
+    '#00b894', '#0984e3', '#6c5ce7', '#fdcb6e', '#00cec9',
+    '#ff7675', '#74b9ff', '#a29bfe', '#fd79a8', '#fab1a0',
+    '#55efc4', '#81ecec', '#ffeaa7'
+  ]
+  
+  parentIds.forEach((parentId, index) => {
+    colorMap.set(parentId, distinctColors[index % distinctColors.length])
+  })
+  
+  return colorMap
+}
+
 const initGraph = async () => {
   if (!cyContainer.value || !props.docs || props.docs.length === 0) {
     isLoading.value = false
@@ -182,17 +201,44 @@ const initGraph = async () => {
   // Register popper extension first
   await registerPopper()
 
-  // Create nodes from docs
-  const nodes = props.docs.map(doc => ({
-    data: {
-      id: doc.id,
-      label: doc.id.split(':').pop() || doc.id, // Simplified label
-      fullData: doc
+  // Identify all unique parent IDs and create color mapping
+  const parentIds = new Set<string>()
+  props.docs.forEach(doc => {
+    const parentId = doc.data?.statistics?.parent
+    if (parentId) {
+      parentIds.add(parentId)
     }
-  }))
+  })
+  const parentColorMap = generateClusterColors(Array.from(parentIds))
 
   // Create a Set of valid node IDs for edge validation
   const validNodeIds = new Set(props.docs.map(doc => doc.id))
+
+  // Color for isolated nodes (degree = 0)
+  const isolatedNodeColor = '#95a5a6' // Gray color for isolated nodes
+
+  // Create nodes from docs with color based on parent or isolation
+  const nodes = props.docs.map(doc => {
+    const degree = doc.data?.statistics?.degree || 0
+    const isIsolated = degree === 0
+    
+    let color: string
+    if (isIsolated) {
+      color = isolatedNodeColor
+    } else {
+      const parentId = doc.data?.statistics?.parent
+      color = (parentId ? parentColorMap.get(parentId) : undefined) || '#3498db' // Default color if no parent
+    }
+    
+    return {
+      data: {
+        id: doc.id,
+        label: doc.id.split(':').pop() || doc.id, // Simplified label
+        fullData: doc,
+        color: color // Store color in node data
+      }
+    }
+  })
 
   // Create edges from cites and cited_by
   const edges: any[] = []
@@ -317,7 +363,7 @@ const initGraph = async () => {
       {
         selector: 'node',
         style: {
-          'background-color': '#3498db',
+          'background-color': 'data(color)', // Use color from node data
           'width': '40px',
           'height': '40px'
         }
@@ -325,7 +371,8 @@ const initGraph = async () => {
       {
         selector: 'node:active',
         style: {
-          'background-color': '#2980b9'
+          'background-color': 'data(color)',
+          'opacity': 0.8
         }
       },
       {
@@ -366,8 +413,10 @@ const initGraph = async () => {
       cyContainer.value.style.cursor = 'pointer'
     }
 
-    // Change node color on hover
-    node.style('background-color', '#2980b9')
+    // Darken node color on hover (reduce opacity slightly)
+    const originalColor = node.data('color')
+    node.style('background-color', originalColor)
+    node.style('opacity', 0.7)
 
     // Clear any existing timeout
     if (tooltipTimeout) {
@@ -441,9 +490,11 @@ const initGraph = async () => {
       cyContainer.value.style.cursor = 'default'
     }
 
-    // Reset node color
+    // Reset node color and opacity
     if (!node.selected()) {
-      node.style('background-color', '#3498db')
+      const originalColor = node.data('color')
+      node.style('background-color', originalColor)
+      node.style('opacity', 1)
     }
 
     // Clear timeout and hide tooltip
