@@ -42,6 +42,9 @@
     <div ref="tooltip" class="graph-tooltip">
       <div class="graph-tooltip-arrow"></div>
       <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
+      <ul v-if="tooltipContent.provisions.length > 0" class="tooltip-provisions">
+        <li v-for="(provision, index) in tooltipContent.provisions" :key="index">{{ provision }}</li>
+      </ul>
       <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
     </div>
   </div>
@@ -166,7 +169,7 @@ const fitToView = () => {
 
 const cyContainer = ref<HTMLElement | null>(null)
 const tooltip = ref<HTMLElement | null>(null)
-const tooltipContent = ref({ ecli: '', summary: '' })
+const tooltipContent = ref({ ecli: '', summary: '', provisions: [] as string[] })
 let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
@@ -442,7 +445,8 @@ const initGraph = async () => {
 
     tooltipContent.value = {
       ecli: docData.id || '',
-      summary: docData.data?.summary || 'No summary available'
+      summary: docData.data?.summary || 'No summary available',
+      provisions: docData.data?.legal_provisions || []
     }
 
     // Show tooltip after a delay
@@ -616,7 +620,7 @@ onBeforeUnmount(() => {
   padding: 8px 10px;
   border-radius: 4px;
   font-size: 11px;
-  max-width: 250px;
+  max-width: 300px;
   pointer-events: none;
   z-index: 1000;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -658,6 +662,20 @@ onBeforeUnmount(() => {
   font-size: 10px;
   word-break: break-all;
   color: #3498db;
+}
+
+.tooltip-provisions {
+  margin: 6px 0;
+  padding-left: 16px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: #495057;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.tooltip-provisions li {
+  margin-bottom: 2px;
 }
 
 .tooltip-summary {
