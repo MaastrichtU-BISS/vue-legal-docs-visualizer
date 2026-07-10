@@ -495,7 +495,7 @@ const initGraph = async () => {
     const nodeId = node.data('id')
     
     if (!selectionMode.value) {
-      cy.$('.currentShown').removeClass('currentShown')
+      cy?.$('.currentShown').removeClass('currentShown')
       node.addClass('currentShown')
       emit('docClick', nodeId)
     }
