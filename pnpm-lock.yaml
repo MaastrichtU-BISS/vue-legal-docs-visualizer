@@ -17,6 +17,9 @@ importers:
       cytoscape:
         specifier: ^3.33.4
         version: 3.34.0
+      cytoscape-expand-collapse:
+        specifier: ^4.1.1
+        version: 4.1.1(cytoscape@3.34.0)
       cytoscape-fcose:
         specifier: ^2.2.0
         version: 2.2.0(cytoscape@3.34.0)
@@ -457,6 +460,11 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  cytoscape-expand-collapse@4.1.1:
+    resolution: {integrity: sha512-MI4/GsA6Rf6RRzNR1aCitBLSnxiIKLxvZyCzF+oti/zn/ui1jmf769VcEFAEbjjsAtwteGsTmczI+niCMWJNvA==}
+    peerDependencies:
+      cytoscape: ^3.3.0
 
   cytoscape-fcose@2.2.0:
     resolution: {integrity: sha512-ki1/VuRIHFCzxWNrsshHYPs6L7TvLu3DL+TyIGEsRcvVERmxokbf5Gdk7mFxZnTdiGtnA4cfSmjZJMviqSuZrQ==}
@@ -1017,6 +1025,10 @@ snapshots:
       layout-base: 2.0.1
 
   csstype@3.2.3: {}
+
+  cytoscape-expand-collapse@4.1.1(cytoscape@3.34.0):
+    dependencies:
+      cytoscape: 3.34.0
 
   cytoscape-fcose@2.2.0(cytoscape@3.34.0):
     dependencies:

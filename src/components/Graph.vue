@@ -123,6 +123,19 @@ const registerFcose = async () => {
   }
 }
 
+// Dynamically import and register cytoscape-expand-collapse - lets whole clusters be
+// represented as a single collapsible node, which is what actually keeps large graphs
+// (thousands of nodes) readable instead of just cramming every node into one layout.
+let expandCollapseRegistered = false
+
+const registerExpandCollapse = async () => {
+  if (!expandCollapseRegistered) {
+    const cytoscapeExpandCollapse = await import('cytoscape-expand-collapse')
+    cytoscapeExpandCollapse.default(cytoscape)
+    expandCollapseRegistered = true
+  }
+}
+
 export interface Props {
   docs?: any[]
   edges?: LegalEdge[]
@@ -147,6 +160,26 @@ const getIterationsForNodeCount = (nodeCount: number): number => {
   if (nodeCount < 1000) return 2500
   if (nodeCount < 3000) return 1500
   return 1000
+}
+
+// A layout can only ever look clean if the number of things it has to place is small - no
+// amount of force-directed tuning fixes visual clutter once you're placing thousands of nodes
+// in one viewport. So past a certain size, clusters (same statistics.parent used for coloring)
+// start collapsed into a single placeholder node, expandable on click. Which clusters start
+// collapsed depends on both the overall graph size (small graphs stay fully expanded) and each
+// cluster's own member count (bigger clusters collapse first).
+const getClusterCollapseThreshold = (totalNodeCount: number): number => {
+  if (totalNodeCount <= 100) return Infinity
+  if (totalNodeCount <= 500) return 15
+  if (totalNodeCount <= 2000) return 8
+  return 4
+}
+
+const calculateClusterSize = (memberCount: number): number => {
+  const minSize = 50
+  const maxSize = 140
+  const scaleFactor = 22
+  return Math.min(minSize + Math.log(memberCount + 1) * scaleFactor, maxSize)
 }
 
 const layoutInfo = computed(() => {
@@ -175,6 +208,8 @@ const applyFilters = () => {
 
   // Determine which nodes should be visible
   nodes.forEach(node => {
+    // Cluster placeholders' visibility is owned by expand/collapse, not search
+    if (node.data('isClusterParent')) return
     const docData = node.data('fullData')
     const nodeId = node.data('id')
 
@@ -280,16 +315,19 @@ const initGraph = async () => {
   // Register extensions first
   await registerPopper()
   await registerFcose()
+  await registerExpandCollapse()
 
-  // Identify all unique parent IDs and create color mapping
-  const parentIds = new Set<string>()
+  // Group docs by cluster (statistics.parent) - this is both the existing color-grouping key
+  // and the new compound-node grouping key used for expand/collapse.
+  const docsByCluster = new Map<string, any[]>()
   props.docs.forEach(doc => {
     const parentId = doc.data?.statistics?.parent
     if (parentId) {
-      parentIds.add(parentId)
+      if (!docsByCluster.has(parentId)) docsByCluster.set(parentId, [])
+      docsByCluster.get(parentId)!.push(doc)
     }
   })
-  const parentColorMap = generateClusterColors(Array.from(parentIds))
+  const parentColorMap = generateClusterColors(Array.from(docsByCluster.keys()))
 
   // Create a Set of valid node IDs for edge validation
   const validNodeIds = new Set(props.docs.map(doc => doc.id))
@@ -312,20 +350,49 @@ const initGraph = async () => {
     return Math.min(size, maxSize)
   }
 
+  // Which clusters get wrapped in a compound node (size >= 2, not worth it for a singleton),
+  // and which of those start collapsed depending on the overall graph size and their own size.
+  const totalDocCount = props.docs.length
+  const collapseThreshold = getClusterCollapseThreshold(totalDocCount)
+  const clusterIdsToCollapse = new Set<string>()
+  let collapsedDocCount = 0
+
+  docsByCluster.forEach((docsInCluster, clusterId) => {
+    if (docsInCluster.length < 2) return
+    if (docsInCluster.length >= collapseThreshold) {
+      clusterIdsToCollapse.add(clusterId)
+      collapsedDocCount += docsInCluster.length
+    }
+  })
+
+  const clusterParentNodes = Array.from(docsByCluster.entries())
+    .filter(([, docsInCluster]) => docsInCluster.length >= 2)
+    .map(([clusterId, docsInCluster]) => ({
+      data: {
+        id: clusterId,
+        label: `${docsInCluster.length} documents`,
+        color: parentColorMap.get(clusterId) || '#3498db',
+        size: calculateClusterSize(docsInCluster.length),
+        isClusterParent: true,
+        memberCount: docsInCluster.length
+      }
+    }))
+
   // Create nodes from docs with color and size based on parent or isolation
   const nodes = props.docs.map(doc => {
     const degree = doc.data?.statistics?.degree || 0
     const isIsolated = degree === 0
     const size = calculateNodeSize(degree)
-    
+    const clusterId = doc.data?.statistics?.parent
+    const isGrouped = Boolean(clusterId && (docsByCluster.get(clusterId)?.length || 0) >= 2)
+
     let color: string
     if (isIsolated) {
       color = isolatedNodeColor
     } else {
-      const parentId = doc.data?.statistics?.parent
-      color = (parentId ? parentColorMap.get(parentId) : undefined) || '#3498db' // Default color if no parent
+      color = (clusterId ? parentColorMap.get(clusterId) : undefined) || '#3498db' // Default color if no parent
     }
-    
+
     return {
       data: {
         id: doc.id,
@@ -333,9 +400,12 @@ const initGraph = async () => {
         fullData: doc,
         color: color, // Store color in node data
         size: size, // Store size in node data
+        ...(isGrouped ? { parent: clusterId } : {})
       }
     }
   })
+
+  const allNodes = [...clusterParentNodes, ...nodes]
 
   // Create edges - prefer the authoritative edges array when provided, falling back to
   // reconstructing from each doc's cites/cited_by (which ECHR documents don't populate).
@@ -407,18 +477,28 @@ const initGraph = async () => {
   // fcose scales far better than core cose - near-linear instead of O(n^2) per iteration -
   // and natively packs disconnected components/isolated nodes into a tidy grid (packComponents
   // + tile) instead of letting them fight for space (or pile up) in the main force simulation.
-  const nodeCount = nodes.length
-  const numIter = getIterationsForNodeCount(nodeCount)
+  // What actually matters for cost/quality here is how many elements are *visible* once
+  // collapsed clusters hide their members - not the raw doc count.
+  const visibleNodeCount = (totalDocCount - collapsedDocCount) + clusterParentNodes.length
+  const numIter = getIterationsForNodeCount(visibleNodeCount)
 
   const layoutConfig = {
     name: 'fcose',
-    quality: nodeCount > 1000 ? 'draft' : 'default',
+    // 'draft' quality only runs fcose's spectral layout step and skips the incremental
+    // force-directed refinement entirely - which is what actually separates disconnected
+    // single-node components (isolated docs, collapsed cluster placeholders). Without it,
+    // every such node has no edge information to place it anywhere, so they all pile up in
+    // the same spot. Collapsing large clusters already did the real work of cutting the
+    // *visible* node count, so 'default' quality here stays affordable.
+    quality: 'default',
     randomize: true,
     animate: false,
     fit: true,
     padding: 30,
     nodeDimensionsIncludeLabels: false,
-    packComponents: true,
+    // packComponents requires the separate cytoscape-layout-utilities extension to do
+    // anything - without it this option is a no-op, so `tile` alone is what actually
+    // arranges disconnected single-node components into a grid.
     tile: true,
     tilingPaddingVertical: 20,
     tilingPaddingHorizontal: 20,
@@ -438,7 +518,7 @@ const initGraph = async () => {
   cy = cytoscape({
     container: cyContainer.value,
     elements: {
-      nodes,
+      nodes: allNodes,
       edges
     },
     selectionType: 'additive',
@@ -446,6 +526,9 @@ const initGraph = async () => {
     userPanningEnabled: true, // Controlled by selectionMode
     autoungrabify: false,
     autounselectify: true, // Controlled by selectionMode
+    // No layout here - we collapse clusters first (see below) so the real fcose layout only
+    // ever has to place the reduced, visible node set, not the full raw graph.
+    layout: { name: 'preset' },
     style: [
       {
         selector: 'node',
@@ -487,16 +570,88 @@ const initGraph = async () => {
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier'
         }
+      },
+      {
+        // Expanded cluster: just a loose dashed boundary behind its (individually visible)
+        // member nodes - no fill/label so it doesn't compete visually with its children.
+        selector: 'node[?isClusterParent]',
+        style: {
+          'background-color': 'data(color)',
+          'background-opacity': 0.12,
+          'border-width': 2,
+          'border-style': 'dashed',
+          'border-color': 'data(color)',
+          'shape': 'round-rectangle',
+          'label': ''
+        }
+      },
+      {
+        // Collapsed cluster: a single sized/labeled placeholder node standing in for its
+        // hidden members. Class is added by cytoscape-expand-collapse itself.
+        selector: 'node.cy-expand-collapse-collapsed-node',
+        style: {
+          'background-opacity': 0.9,
+          'width': 'data(size)',
+          'height': 'data(size)',
+          'border-style': 'solid',
+          'label': 'data(label)',
+          'text-valign': 'center',
+          'text-halign': 'center',
+          'font-size': 13,
+          'font-weight': 'bold',
+          'color': '#ffffff',
+          'text-outline-width': 2,
+          'text-outline-color': 'data(color)'
+        }
+      },
+      {
+        // Meta-edges: edges rerouted to/from a collapsed cluster's placeholder node.
+        selector: 'edge.cy-expand-collapse-meta-edge',
+        style: {
+          'line-style': 'dashed',
+          'width': 2,
+          'line-color': '#95a5a6',
+          'target-arrow-color': '#95a5a6',
+          'target-arrow-shape': 'triangle',
+          'curve-style': 'bezier'
+        }
       }
-    ],
-    layout: layoutConfig
+    ]
+  })
+
+  // Register expand/collapse and decide which clusters start collapsed. layoutBy is left
+  // null here - we drive re-layout ourselves below for full control over when/how it runs.
+  const expandCollapseApi = (cy as any).expandCollapse({
+    layoutBy: null,
+    animate: true,
+    animationDuration: 300,
+    undoable: false,
+    fisheye: false,
+    cueEnabled: true,
+    expandCollapseCuePosition: 'top-left'
+  })
+
+  const toCollapse = cy.nodes().filter(n => clusterIdsToCollapse.has(n.id()))
+  if (toCollapse.length > 0) {
+    expandCollapseApi.collapse(toCollapse)
+  }
+
+  // Run the real layout once, over just the resulting (much smaller) visible graph.
+  cy.layout(layoutConfig).run()
+
+  // Whenever the user manually expands/collapses a cluster via the +/- cue, re-layout
+  // incrementally (randomize: false) so unrelated nodes don't jump around.
+  const relayoutConfig = { ...layoutConfig, randomize: false, animate: true }
+  cy.on('expandcollapse.aftercollapse expandcollapse.afterexpand', () => {
+    cy?.layout(relayoutConfig).run()
   })
 
   // Handle node clicks based on mode
   cy.on('tap', 'node', (event) => {
     const node = event.target
+    if (node.data('isClusterParent')) return // expand/collapse is handled by the extension's own cue
     const nodeId = node.data('id')
-    
+
     if (!selectionMode.value) {
       cy?.$('.currentShown').removeClass('currentShown')
       node.addClass('currentShown')
@@ -517,6 +672,7 @@ const initGraph = async () => {
   // Add hover event listeners for tooltip
   cy.on('mouseover', 'node', (event) => {
     const node = event.target
+    if (node.data('isClusterParent')) return
     const docData = node.data('fullData')
 
     // Change cursor to pointer
