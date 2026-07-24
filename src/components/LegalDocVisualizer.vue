@@ -19,24 +19,25 @@
 
         <div class="content">
             <KeepAlive>
-                <component 
+                <component
                     :is="currentMode === VisualizationMode.TABLE ? Table : Graph"
                     ref="currentComponentRef"
                     :docs="docs"
+                    :edges="edges"
                     @doc-click="handleDocClick"
                     class="visualization-container"
                 />
             </KeepAlive>
         </div>
 
-        <DocumentInfo :document="selectedDocument" :docs="docs" v-model:visible="drawerVisible"
+        <DocumentInfo :document="selectedDocument" :docs="docs" :edges="edges" v-model:visible="drawerVisible"
             @citation-click="handleCitationClick" />
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue'
-import type { LegalDocument } from './types'
+import type { LegalDocument, LegalEdge } from './types'
 import Button from 'primevue/button'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
@@ -46,6 +47,7 @@ import 'primeicons/primeicons.css'
 
 export interface Props {
     docs?: LegalDocument[]
+    edges?: LegalEdge[]
 }
 
 const props = defineProps<Props>();

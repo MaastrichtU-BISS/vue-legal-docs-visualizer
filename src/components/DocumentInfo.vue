@@ -123,10 +123,10 @@
             </div>
 
             <!-- Citations -->
-            <div class="info-section" v-if="document.data?.cites && document.data.cites.length > 0">
-                <h3 class="section-title">Cites ({{ document.data.cites.length }})</h3>
+            <div class="info-section" v-if="documentCites.length > 0">
+                <h3 class="section-title">Cites ({{ documentCites.length }})</h3>
                 <ul class="citation-list">
-                    <li v-for="(cite, index) in document.data.cites" :key="index">
+                    <li v-for="(cite, index) in documentCites" :key="index">
                         <span v-if="isEcliInDocs(cite)" class="citation-link" @click="handleCitationClick(cite)">
                             {{ cite }}
                         </span>
@@ -138,10 +138,10 @@
             </div>
 
             <!-- Cited By -->
-            <div class="info-section" v-if="document.data?.cited_by && document.data.cited_by.length > 0">
-                <h3 class="section-title">Cited By ({{ document.data.cited_by.length }})</h3>
+            <div class="info-section" v-if="documentCitedBy.length > 0">
+                <h3 class="section-title">Cited By ({{ documentCitedBy.length }})</h3>
                 <ul class="citation-list">
-                    <li v-for="(cite, index) in document.data.cited_by" :key="index">
+                    <li v-for="(cite, index) in documentCitedBy" :key="index">
                         <span v-if="isEcliInDocs(cite)" class="citation-link" @click="handleCitationClick(cite)">
                             {{ cite }}
                         </span>
@@ -172,13 +172,14 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import type { RechtspraakDocumentData, EchrDocumentData } from 'legal-docs-client'
-import { isEchrDocument, type LegalDocument } from './types'
+import { isEchrDocument, type LegalDocument, type LegalEdge } from './types'
 import Drawer from 'primevue/drawer'
 
 export interface Props {
     document?: LegalDocument | null
     visible?: boolean
     docs?: LegalDocument[]
+    edges?: LegalEdge[]
 }
 
 const props = defineProps<Props>()
@@ -190,6 +191,24 @@ const rsData = computed<RechtspraakDocumentData | null>(() =>
 const echrData = computed<EchrDocumentData | null>(() =>
     props.document && isEchrDocument(props.document) ? props.document.data as EchrDocumentData : null
 )
+
+// Prefer the authoritative edges array when provided (ECHR documents don't populate
+// cites/cited_by themselves), falling back to the document's own fields otherwise.
+const documentCites = computed<string[]>(() => {
+    if (!props.document) return []
+    if (props.edges) {
+        return props.edges.filter(e => e.source === props.document!.id).map(e => e.target)
+    }
+    return (props.document.data as any)?.cites ?? []
+})
+
+const documentCitedBy = computed<string[]>(() => {
+    if (!props.document) return []
+    if (props.edges) {
+        return props.edges.filter(e => e.target === props.document!.id).map(e => e.source)
+    }
+    return (props.document.data as any)?.cited_by ?? []
+})
 
 const toArticleList = (value?: string | string[]): string[] => {
     if (!value) return []

@@ -93,6 +93,7 @@ import Button from 'primevue/button'
 import InputSwitch from 'primevue/inputswitch'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
+import type { LegalEdge } from './types'
 
 // Dynamically import and register cytoscape-popper
 let popperRegistered = false
@@ -111,6 +112,7 @@ const registerPopper = async () => {
 
 export interface Props {
   docs?: any[]
+  edges?: LegalEdge[]
 }
 
 const props = defineProps<Props>()
@@ -322,53 +324,72 @@ const initGraph = async () => {
     }
   })
 
-  // Create edges from cites and cited_by
+  // Create edges - prefer the authoritative edges array when provided, falling back to
+  // reconstructing from each doc's cites/cited_by (which ECHR documents don't populate).
   const edges: any[] = []
   const addedEdges = new Set<string>() // To avoid duplicate edges
 
-  props.docs.forEach(doc => {
-    const sourceId = doc.id
-
-    // Add edges for documents this one cites
-    if (doc.data?.cites && Array.isArray(doc.data.cites)) {
-      doc.data.cites.forEach((targetId: string) => {
-        // Only create edge if target exists in our dataset
-        if (validNodeIds.has(targetId)) {
-          const edgeId = `${sourceId}->${targetId}`
-          if (!addedEdges.has(edgeId)) {
-            edges.push({
-              data: {
-                id: edgeId,
-                source: sourceId,
-                target: targetId
-              }
-            })
-            addedEdges.add(edgeId)
-          }
+  if (props.edges) {
+    props.edges.forEach(edge => {
+      if (validNodeIds.has(edge.source) && validNodeIds.has(edge.target)) {
+        const edgeId = `${edge.source}->${edge.target}`
+        if (!addedEdges.has(edgeId)) {
+          edges.push({
+            data: {
+              id: edgeId,
+              source: edge.source,
+              target: edge.target
+            }
+          })
+          addedEdges.add(edgeId)
         }
-      })
-    }
+      }
+    })
+  } else {
+    props.docs.forEach(doc => {
+      const sourceId = doc.id
 
-    // Add edges for documents that cite this one
-    if (doc.data?.cited_by && Array.isArray(doc.data.cited_by)) {
-      doc.data.cited_by.forEach((targetId: string) => {
-        // Only create edge if source exists in our dataset
-        if (validNodeIds.has(targetId)) {
-          const edgeId = `${targetId}->${sourceId}`
-          if (!addedEdges.has(edgeId)) {
-            edges.push({
-              data: {
-                id: edgeId,
-                source: targetId,
-                target: sourceId
-              }
-            })
-            addedEdges.add(edgeId)
+      // Add edges for documents this one cites
+      if (doc.data?.cites && Array.isArray(doc.data.cites)) {
+        doc.data.cites.forEach((targetId: string) => {
+          // Only create edge if target exists in our dataset
+          if (validNodeIds.has(targetId)) {
+            const edgeId = `${sourceId}->${targetId}`
+            if (!addedEdges.has(edgeId)) {
+              edges.push({
+                data: {
+                  id: edgeId,
+                  source: sourceId,
+                  target: targetId
+                }
+              })
+              addedEdges.add(edgeId)
+            }
           }
-        }
-      })
-    }
-  })
+        })
+      }
+
+      // Add edges for documents that cite this one
+      if (doc.data?.cited_by && Array.isArray(doc.data.cited_by)) {
+        doc.data.cited_by.forEach((targetId: string) => {
+          // Only create edge if source exists in our dataset
+          if (validNodeIds.has(targetId)) {
+            const edgeId = `${targetId}->${sourceId}`
+            if (!addedEdges.has(edgeId)) {
+              edges.push({
+                data: {
+                  id: edgeId,
+                  source: targetId,
+                  target: sourceId
+                }
+              })
+              addedEdges.add(edgeId)
+            }
+          }
+        })
+      }
+    })
+  }
 
   // Progressive layout optimization based on graph size
   // The COSE algorithm complexity is O(iterations × nodes²)

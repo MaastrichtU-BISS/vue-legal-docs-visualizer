@@ -77,9 +77,11 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
+import type { LegalEdge } from './types'
 
 export interface Props {
   docs?: any[]
+  edges?: LegalEdge[]
 }
 
 const props = defineProps<Props>()
@@ -171,10 +173,21 @@ const highlightRowById = (ecli: string) => {
   }
 }
 
+// Count incoming edges per doc when the authoritative edges array is provided (ECHR docs
+// don't populate cited_by themselves)
+const citedByCount = computed(() => {
+  const counts = new Map<string, number>()
+  if (!props.edges) return counts
+  props.edges.forEach(edge => {
+    counts.set(edge.target, (counts.get(edge.target) || 0) + 1)
+  })
+  return counts
+})
+
 // Simplified table data structure
 const tableDocs = computed(() => {
   if (!props.docs || props.docs.length === 0) return []
-  
+
   return props.docs.map(doc => {
     const data = doc.data || {}
     
@@ -224,7 +237,7 @@ const tableDocs = computed(() => {
         ? (Array.isArray(data.keywords) && data.keywords.length > 0 ? data.keywords.join(', ') : '-')
         : (Array.isArray(data.domains) && data.domains.length > 0 ? data.domains.join(', ') : '-'),
       decisionSummary: data.document_type || '-',
-      timesCited: Array.isArray(data.cited_by) ? data.cited_by.length : 0,
+      timesCited: props.edges ? (citedByCount.value.get(doc.id) || 0) : (Array.isArray(data.cited_by) ? data.cited_by.length : 0),
       topic: isEchr ? '-' : (data.procedure_type || '-'),
       degree: formatNumber(stats.degree),
       degreeValue: getNumValue(stats.degree),
