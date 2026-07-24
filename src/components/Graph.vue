@@ -653,10 +653,10 @@ const initGraph = async () => {
   cy.on('tap', 'node', (event) => {
     const node = event.target
     if (node.data('isClusterParent')) {
-      // Clicking a cluster toggles it - simpler and more discoverable than hunting for a cue
-      if (expandCollapseApi.isCollapsible(node)) {
-        expandCollapseApi.collapse(node)
-      } else if (expandCollapseApi.isExpandable(node)) {
+      // Collapsed placeholder: click to expand. Once expanded, the rectangle is just a
+      // passive visual grouping around its (individually clickable) member nodes - it
+      // doesn't act as a node itself, so clicking its body/background does nothing.
+      if (expandCollapseApi.isExpandable(node)) {
         expandCollapseApi.expand(node)
       }
       return
@@ -684,10 +684,11 @@ const initGraph = async () => {
   cy.on('mouseover', 'node', (event) => {
     const node = event.target
 
-    // Change cursor to pointer - also applies to cluster nodes, which are clickable to
-    // expand/collapse even though they skip the tooltip below.
+    // An expanded cluster's rectangle is inert (not clickable), so only show a pointer
+    // cursor for real doc nodes and still-collapsed cluster placeholders.
+    const isInertClusterRect = node.data('isClusterParent') && !expandCollapseApi.isExpandable(node)
     if (cyContainer.value) {
-      cyContainer.value.style.cursor = 'pointer'
+      cyContainer.value.style.cursor = isInertClusterRect ? 'default' : 'pointer'
     }
 
     if (node.data('isClusterParent')) return
