@@ -42,6 +42,7 @@
     <div ref="tooltip" class="graph-tooltip">
       <div class="graph-tooltip-arrow"></div>
       <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
+      <div v-if="tooltipContent.title" class="tooltip-title">{{ tooltipContent.title }}</div>
       <ul v-if="tooltipContent.provisions.length > 0" class="tooltip-provisions">
         <li v-for="(provision, index) in tooltipContent.provisions" :key="index">{{ provision }}</li>
       </ul>
@@ -166,7 +167,7 @@ const applyFilters = () => {
     // Check search query
     const matchesSearch = !searchLower ||
       nodeId.toLowerCase().includes(searchLower) ||
-      (docData?.data?.summary || '').toLowerCase().includes(searchLower)
+      (docData?.data?.summary || docData?.data?.conclusion || '').toLowerCase().includes(searchLower)
 
     // Apply visibility
     if (matchesSearch) {
@@ -230,7 +231,7 @@ const updateSelectionCount = () => {
 
 const cyContainer = ref<HTMLElement | null>(null)
 const tooltip = ref<HTMLElement | null>(null)
-const tooltipContent = ref({ ecli: '', summary: '', provisions: [] as string[] })
+const tooltipContent = ref({ ecli: '', title: '', summary: '', provisions: [] as string[] })
 let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
@@ -531,9 +532,11 @@ const initGraph = async () => {
       clearTimeout(tooltipTimeout)
     }
 
+    const isEchr = docData.data?.dataset === 'ECHR'
     tooltipContent.value = {
       ecli: docData.id || '',
-      summary: docData.data?.summary || 'No summary available',
+      title: isEchr ? (docData.data?.title || '') : '',
+      summary: (isEchr ? docData.data?.conclusion : docData.data?.summary) || 'No summary available',
       provisions: docData.data?.legal_provisions || []
     }
 
@@ -766,6 +769,13 @@ onBeforeUnmount(() => {
   font-size: 10px;
   word-break: break-all;
   color: #3498db;
+}
+
+.tooltip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: #212529;
 }
 
 .tooltip-provisions {

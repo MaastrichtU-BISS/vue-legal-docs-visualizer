@@ -130,6 +130,11 @@ const columns: Column[] = [
 const selectedRow = ref<any>(null)
 const currentPage = ref(0)
 
+const buildHudocUrl = (itemid: string): string => {
+  const encodedItemid = encodeURIComponent(itemid)
+  return `https://hudoc.echr.coe.int/eng#%7B%22itemid%22:%5B%22${encodedItemid}%22%5D%7D`
+}
+
 const highlightRowById = (ecli: string) => {
   if (tableDocs.value) {
     const row = tableDocs.value.find(r => r.ecli === ecli)
@@ -207,18 +212,20 @@ const tableDocs = computed(() => {
       return (val !== null && val !== undefined && typeof val === 'number') ? val : null
     }
     
+    const isEchr = data.dataset === 'ECHR'
+
     return {
       ecli: doc.id || '-',
       date: dateDisplay,
       dateValue: dateValue,
-      summary: data.summary || '-',
-      instance: data.instance || '-',
-      domain: Array.isArray(data.domains) && data.domains.length > 0 
-        ? data.domains.join(', ') 
-        : '-',
+      summary: (isEchr ? data.conclusion : data.summary) || '-',
+      instance: (isEchr ? data.respondent_state : data.instance) || '-',
+      domain: isEchr
+        ? (Array.isArray(data.keywords) && data.keywords.length > 0 ? data.keywords.join(', ') : '-')
+        : (Array.isArray(data.domains) && data.domains.length > 0 ? data.domains.join(', ') : '-'),
       decisionSummary: data.document_type || '-',
       timesCited: Array.isArray(data.cited_by) ? data.cited_by.length : 0,
-      topic: data.procedure_type || '-',
+      topic: isEchr ? '-' : (data.procedure_type || '-'),
       degree: formatNumber(stats.degree),
       degreeValue: getNumValue(stats.degree),
       inDegree: formatNumber(stats.inDegree),
@@ -235,7 +242,9 @@ const tableDocs = computed(() => {
       pageRankValue: getNumValue(stats.pageRank),
       community: formatNumber(stats.community),
       communityValue: getNumValue(stats.community),
-      fullTextUrl: data.url_publication || null
+      fullTextUrl: isEchr
+        ? (data.itemid ? buildHudocUrl(data.itemid) : null)
+        : (data.url_publication || null)
     }
   })
 })

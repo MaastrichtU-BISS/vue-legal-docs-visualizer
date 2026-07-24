@@ -25,51 +25,88 @@
                     <span class="field-value">{{ document.data.date_decision }}</span>
                 </div>
 
-                <div class="info-field" v-if="document.data.instance">
-                    <span class="field-label">Instance:</span>
-                    <span class="field-value">{{ document.data.instance }}</span>
-                </div>
+                <template v-if="rsData">
+                    <div class="info-field" v-if="rsData.instance">
+                        <span class="field-label">Instance:</span>
+                        <span class="field-value">{{ rsData.instance }}</span>
+                    </div>
 
-                <div class="info-field" v-if="document.data.domains && document.data.domains.length > 0">
-                    <span class="field-label">Domains:</span>
-                    <span class="field-value">{{ document.data.domains.join(', ') }}</span>
-                </div>
+                    <div class="info-field" v-if="rsData.domains && rsData.domains.length > 0">
+                        <span class="field-label">Domains:</span>
+                        <span class="field-value">{{ rsData.domains.join(', ') }}</span>
+                    </div>
 
-                <div class="info-field" v-if="document.data.document_type">
-                    <span class="field-label">Document Type:</span>
-                    <span class="field-value">{{ document.data.document_type }}</span>
-                </div>
+                    <div class="info-field" v-if="rsData.document_type">
+                        <span class="field-label">Document Type:</span>
+                        <span class="field-value">{{ rsData.document_type }}</span>
+                    </div>
 
-                <div class="info-field" v-if="document.data.procedure_type">
-                    <span class="field-label">Procedure Type:</span>
-                    <span class="field-value">{{ document.data.procedure_type }}</span>
-                </div>
+                    <div class="info-field" v-if="rsData.procedure_type">
+                        <span class="field-label">Procedure Type:</span>
+                        <span class="field-value">{{ rsData.procedure_type }}</span>
+                    </div>
 
-                <div class="info-field" v-if="document.data.jurisdiction_country">
-                    <span class="field-label">Jurisdiction:</span>
-                    <span class="field-value">{{ document.data.jurisdiction_country }}</span>
-                </div>
+                    <div class="info-field" v-if="rsData.jurisdiction_country">
+                        <span class="field-label">Jurisdiction:</span>
+                        <span class="field-value">{{ rsData.jurisdiction_country }}</span>
+                    </div>
+                </template>
 
-                <div class="info-field" v-if="document.data.source">
-                    <span class="field-label">Source:</span>
-                    <span class="field-value">{{ document.data.source }}</span>
-                </div>
+                <template v-else-if="echrData">
+                    <div class="info-field" v-if="echrData.respondent_state">
+                        <span class="field-label">Respondent State:</span>
+                        <span class="field-value">{{ echrData.respondent_state }}</span>
+                    </div>
+
+                    <div class="info-field" v-if="echrData.keywords && echrData.keywords.length > 0">
+                        <span class="field-label">Keywords:</span>
+                        <span class="field-value">{{ echrData.keywords.join(', ') }}</span>
+                    </div>
+
+                    <div class="info-field" v-if="echrData.document_type">
+                        <span class="field-label">Document Type:</span>
+                        <span class="field-value">{{ echrData.document_type }}</span>
+                    </div>
+
+                    <div class="info-field" v-if="echrData.importance !== undefined && echrData.importance !== null">
+                        <span class="field-label">Importance:</span>
+                        <span class="field-value">{{ echrData.importance }}/4</span>
+                    </div>
+                </template>
             </div>
 
             <!-- Summary -->
-            <div class="info-section" v-if="document.data?.summary">
+            <div class="info-section" v-if="rsData?.summary">
                 <h3 class="section-title">Summary</h3>
-                <p class="summary-text">{{ document.data.summary }}</p>
+                <p class="summary-text">{{ rsData.summary }}</p>
+            </div>
+            <div class="info-section" v-else-if="echrData?.conclusion">
+                <h3 class="section-title">Conclusion</h3>
+                <p class="summary-text">{{ echrData.conclusion }}</p>
             </div>
 
             <!-- Legal Provisions -->
-            <div class="info-section" v-if="document.data?.legal_provisions && document.data.legal_provisions.length > 0">
+            <div class="info-section" v-if="rsData?.legal_provisions && rsData.legal_provisions.length > 0">
                 <h3 class="section-title">Legal Provisions</h3>
                 <ul class="provision-list">
-                    <li v-for="(provision, index) in document.data.legal_provisions" :key="index">
+                    <li v-for="(provision, index) in rsData.legal_provisions" :key="index">
                         {{ provision }}
                     </li>
                 </ul>
+            </div>
+
+            <!-- Articles (ECHR only) -->
+            <div class="info-section"
+                v-if="echrData && (toArticleList(echrData.article_violated).length > 0 || toArticleList(echrData.article_applied).length > 0)">
+                <h3 class="section-title">Articles</h3>
+                <div class="info-field" v-if="toArticleList(echrData.article_violated).length > 0">
+                    <span class="field-label">Violated:</span>
+                    <span class="field-value">{{ toArticleList(echrData.article_violated).join(', ') }}</span>
+                </div>
+                <div class="info-field" v-if="toArticleList(echrData.article_applied).length > 0">
+                    <span class="field-label">Applied:</span>
+                    <span class="field-value">{{ toArticleList(echrData.article_applied).join(', ') }}</span>
+                </div>
             </div>
 
             <!-- Statistics -->
@@ -116,9 +153,15 @@
             </div>
 
             <!-- URL -->
-            <div class="info-section" v-if="document.data?.url_publication">
+            <div class="info-section" v-if="rsData?.url_publication">
                 <h3 class="section-title">Publication</h3>
-                <a :href="document.data.url_publication" target="_blank" class="publication-link">
+                <a :href="rsData.url_publication" target="_blank" class="publication-link">
+                    View Full Text <i class="pi pi-external-link"></i>
+                </a>
+            </div>
+            <div class="info-section" v-else-if="echrData?.itemid">
+                <h3 class="section-title">Publication</h3>
+                <a :href="buildHudocUrl(echrData.itemid)" target="_blank" class="publication-link">
                     View Full Text <i class="pi pi-external-link"></i>
                 </a>
             </div>
@@ -127,8 +170,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { LegalDocument } from 'legal-docs-client'
+import { ref, watch, computed } from 'vue'
+import type { RechtspraakDocumentData, EchrDocumentData } from 'legal-docs-client'
+import { isEchrDocument, type LegalDocument } from './types'
 import Drawer from 'primevue/drawer'
 
 export interface Props {
@@ -138,6 +182,24 @@ export interface Props {
 }
 
 const props = defineProps<Props>()
+
+const rsData = computed<RechtspraakDocumentData | null>(() =>
+    props.document && !isEchrDocument(props.document) ? props.document.data as RechtspraakDocumentData : null
+)
+
+const echrData = computed<EchrDocumentData | null>(() =>
+    props.document && isEchrDocument(props.document) ? props.document.data as EchrDocumentData : null
+)
+
+const toArticleList = (value?: string | string[]): string[] => {
+    if (!value) return []
+    return Array.isArray(value) ? value : [value]
+}
+
+const buildHudocUrl = (itemid: string): string => {
+    const encodedItemid = encodeURIComponent(itemid)
+    return `https://hudoc.echr.coe.int/eng#%7B%22itemid%22:%5B%22${encodedItemid}%22%5D%7D`
+}
 
 const emit = defineEmits<{
     'update:visible': [value: boolean]
