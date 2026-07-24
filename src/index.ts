@@ -7,7 +7,7 @@ import Graph from './components/Graph.vue'
 import './styles/main.css'
 
 export { LegalDocVisualizer, Graph }
-export type { LegalDocument } from './components/types'
+export type { LegalDocument, LegalEdge } from './components/types'
 
 export interface LegalDocsVisualizerPlugin {
   install: (app: App) => void
