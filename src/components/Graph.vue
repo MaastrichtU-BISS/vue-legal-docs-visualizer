@@ -110,6 +110,19 @@ const registerPopper = async () => {
   }
 }
 
+// Dynamically import and register cytoscape-fcose - a much faster (near-linear vs the core
+// cose layout's O(n^2) per iteration) and overlap-aware layout, needed once graphs reach the
+// hundreds of nodes.
+let fcoseRegistered = false
+
+const registerFcose = async () => {
+  if (!fcoseRegistered) {
+    const cytoscapeFcose = await import('cytoscape-fcose')
+    cytoscape.use(cytoscapeFcose.default)
+    fcoseRegistered = true
+  }
+}
+
 export interface Props {
   docs?: any[]
   edges?: LegalEdge[]
@@ -127,14 +140,13 @@ const selectionMode = ref(false)
 
 const totalCount = computed(() => props.docs?.length || 0)
 
-// Helper function to calculate iteration count based on node count
+// Helper function to calculate iteration count based on node count. fcose's per-iteration
+// cost is much lower than core cose's O(n^2) (spectral layout + quadtree-approximated forces),
+// so we can afford far more iterations at every size without the slowdown cose had.
 const getIterationsForNodeCount = (nodeCount: number): number => {
-  if (nodeCount < 100) return 1000
-  if (nodeCount < 300) return 500
-  if (nodeCount < 500) return 200
-  if (nodeCount < 1000) return 100
-  if (nodeCount < 2000) return 50
-  return 30
+  if (nodeCount < 1000) return 2500
+  if (nodeCount < 3000) return 1500
+  return 1000
 }
 
 const layoutInfo = computed(() => {
@@ -265,8 +277,9 @@ const initGraph = async () => {
 
   isLoading.value = true
 
-  // Register popper extension first
+  // Register extensions first
   await registerPopper()
+  await registerFcose()
 
   // Identify all unique parent IDs and create color mapping
   const parentIds = new Set<string>()
@@ -391,66 +404,34 @@ const initGraph = async () => {
     })
   }
 
-  // Progressive layout optimization based on graph size
-  // The COSE algorithm complexity is O(iterations × nodes²)
-  // We scale down iterations, repulsion, and elasticity as graphs grow
+  // fcose scales far better than core cose - near-linear instead of O(n^2) per iteration -
+  // and natively packs disconnected components/isolated nodes into a tidy grid (packComponents
+  // + tile) instead of letting them fight for space (or pile up) in the main force simulation.
   const nodeCount = nodes.length
   const numIter = getIterationsForNodeCount(nodeCount)
-  
-  let nodeRepulsion: number
-  let edgeElasticity: number
-  let coolingFactor: number
-  
-  if (nodeCount < 100) {
-    // Small graphs: High quality
-    nodeRepulsion = 400000
-    edgeElasticity = 100
-    coolingFactor = 0.95
-  } else if (nodeCount < 300) {
-    // Medium graphs: Good quality
-    nodeRepulsion = 300000
-    edgeElasticity = 80
-    coolingFactor = 0.93
-  } else if (nodeCount < 500) {
-    // Large graphs: Balanced
-    nodeRepulsion = 250000
-    edgeElasticity = 60
-    coolingFactor = 0.90
-  } else if (nodeCount < 1000) {
-    // Very large graphs: Performance focus
-    nodeRepulsion = 200000
-    edgeElasticity = 50
-    coolingFactor = 0.88
-  } else if (nodeCount < 2000) {
-    // Huge graphs: Minimal iterations
-    nodeRepulsion = 150000
-    edgeElasticity = 40
-    coolingFactor = 0.85
-  } else {
-    // Massive graphs: Ultra-fast
-    nodeRepulsion = 100000
-    edgeElasticity = 30
-    coolingFactor = 0.80
-  }
 
   const layoutConfig = {
-    name: 'cose',
+    name: 'fcose',
+    quality: nodeCount > 1000 ? 'draft' : 'default',
+    randomize: true,
     animate: false,
-    idealEdgeLength: 100,
-    nodeOverlap: 20,
-    refresh: 20,
     fit: true,
     padding: 30,
-    randomize: false,
-    componentSpacing: 100,
-    nodeRepulsion,
-    edgeElasticity,
-    nestingFactor: 5,
-    gravity: 80,
+    nodeDimensionsIncludeLabels: false,
+    packComponents: true,
+    tile: true,
+    tilingPaddingVertical: 20,
+    tilingPaddingHorizontal: 20,
+    nodeRepulsion: 4500,
+    idealEdgeLength: 100,
+    edgeElasticity: 0.45,
+    nestingFactor: 0.1,
     numIter,
-    initialTemp: 200,
-    coolingFactor,
-    minTemp: 1.0
+    gravity: 0.25,
+    gravityRange: 3.8,
+    gravityCompound: 1.0,
+    gravityRangeCompound: 1.5,
+    initialEnergyOnIncremental: 0.3
   }
 
   // Initialize cytoscape
