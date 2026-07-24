@@ -653,9 +653,11 @@ const initGraph = async () => {
   cy.on('tap', 'node', (event) => {
     const node = event.target
     if (node.data('isClusterParent')) {
-      // Collapsed placeholder: click to expand. Once expanded, the rectangle is just a
-      // passive visual grouping around its (individually clickable) member nodes - it
-      // doesn't act as a node itself, so clicking its body/background does nothing.
+      // Single click only ever expands a collapsed placeholder. While expanded, the
+      // rectangle is just a passive visual grouping around its (individually clickable)
+      // member nodes - a single click on its body/background does nothing, so it doesn't
+      // compete with its own children as an interactive element. Double-click collapses
+      // it back (see the dbltap handler below).
       if (expandCollapseApi.isExpandable(node)) {
         expandCollapseApi.expand(node)
       }
@@ -671,6 +673,14 @@ const initGraph = async () => {
     // If selectionMode is true, Cytoscape handles selection automatically
   })
 
+  // Double-click a cluster to fold it back into its collapsed placeholder.
+  cy.on('dbltap', 'node', (event) => {
+    const node = event.target
+    if (node.data('isClusterParent') && expandCollapseApi.isCollapsible(node)) {
+      expandCollapseApi.collapse(node)
+    }
+  })
+
   // Add selection event listeners to update count
   cy.on('select', 'node', () => {
     updateSelectionCount()
@@ -684,11 +694,10 @@ const initGraph = async () => {
   cy.on('mouseover', 'node', (event) => {
     const node = event.target
 
-    // An expanded cluster's rectangle is inert (not clickable), so only show a pointer
-    // cursor for real doc nodes and still-collapsed cluster placeholders.
-    const isInertClusterRect = node.data('isClusterParent') && !expandCollapseApi.isExpandable(node)
+    // Every node is interactive in some way here: real docs and collapsed placeholders on
+    // single click, expanded cluster rectangles on double-click (see dbltap handler above).
     if (cyContainer.value) {
-      cyContainer.value.style.cursor = isInertClusterRect ? 'default' : 'pointer'
+      cyContainer.value.style.cursor = 'pointer'
     }
 
     if (node.data('isClusterParent')) return
