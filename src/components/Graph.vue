@@ -621,14 +621,17 @@ const initGraph = async () => {
 
   // Register expand/collapse and decide which clusters start collapsed. layoutBy is left
   // null here - we drive re-layout ourselves below for full control over when/how it runs.
+  // cueEnabled is off: the extension only draws its +/- cue on the currently *selected* node,
+  // but this graph runs with autounselectify true in View mode (selection is reserved for the
+  // separate multi-select/filter feature), so a selection-driven cue would never be visible.
+  // Clicking a cluster node to toggle it directly (see the tap handler below) sidesteps that.
   const expandCollapseApi = (cy as any).expandCollapse({
     layoutBy: null,
     animate: true,
     animationDuration: 300,
     undoable: false,
     fisheye: false,
-    cueEnabled: true,
-    expandCollapseCuePosition: 'top-left'
+    cueEnabled: false
   })
 
   const toCollapse = cy.nodes().filter(n => clusterIdsToCollapse.has(n.id()))
@@ -639,7 +642,7 @@ const initGraph = async () => {
   // Run the real layout once, over just the resulting (much smaller) visible graph.
   cy.layout(layoutConfig).run()
 
-  // Whenever the user manually expands/collapses a cluster via the +/- cue, re-layout
+  // Whenever the user manually expands/collapses a cluster by clicking it, re-layout
   // incrementally (randomize: false) so unrelated nodes don't jump around.
   const relayoutConfig = { ...layoutConfig, randomize: false, animate: true }
   cy.on('expandcollapse.aftercollapse expandcollapse.afterexpand', () => {
@@ -649,7 +652,15 @@ const initGraph = async () => {
   // Handle node clicks based on mode
   cy.on('tap', 'node', (event) => {
     const node = event.target
-    if (node.data('isClusterParent')) return // expand/collapse is handled by the extension's own cue
+    if (node.data('isClusterParent')) {
+      // Clicking a cluster toggles it - simpler and more discoverable than hunting for a cue
+      if (expandCollapseApi.isCollapsible(node)) {
+        expandCollapseApi.collapse(node)
+      } else if (expandCollapseApi.isExpandable(node)) {
+        expandCollapseApi.expand(node)
+      }
+      return
+    }
     const nodeId = node.data('id')
 
     if (!selectionMode.value) {
@@ -672,13 +683,15 @@ const initGraph = async () => {
   // Add hover event listeners for tooltip
   cy.on('mouseover', 'node', (event) => {
     const node = event.target
-    if (node.data('isClusterParent')) return
-    const docData = node.data('fullData')
 
-    // Change cursor to pointer
+    // Change cursor to pointer - also applies to cluster nodes, which are clickable to
+    // expand/collapse even though they skip the tooltip below.
     if (cyContainer.value) {
       cyContainer.value.style.cursor = 'pointer'
     }
+
+    if (node.data('isClusterParent')) return
+    const docData = node.data('fullData')
 
     // Darken node color on hover only if not selected
     if (!node.selected()) {
