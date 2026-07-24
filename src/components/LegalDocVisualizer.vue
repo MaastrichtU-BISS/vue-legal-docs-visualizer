@@ -36,7 +36,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue'
-import type { LegalDocument } from 'legal-docs-client'
+import type { LegalDocument } from './types'
 import Button from 'primevue/button'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
