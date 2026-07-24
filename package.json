@@ -1,6 +1,6 @@
 {
   "name": "vue-legal-docs-visualizer",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "A Vue component library for visualizing legal documents",
   "type": "module",
   "main": "./dist/vue-legal-docs-visualizer.umd.js",
@@ -29,7 +29,7 @@
     "@primeuix/themes": "^2.0.3",
     "cytoscape": "^3.33.4",
     "cytoscape-popper": "^4.0.1",
-    "legal-docs-client": "^0.3.0",
+    "legal-docs-client": "^1.0.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5"
   },
