@@ -970,6 +970,20 @@ onBeforeUnmount(() => {
   border: 1px solid #dee2e6;
   border-radius: 4px;
   cursor: default;
+  /* position:relative alone doesn't contain descendants' z-index - it also needs a
+     non-auto z-index of its own, otherwise a high z-index child (like the cue overlay
+     canvas below) escapes into the parent's stacking context and can sit on top of
+     sibling elements like .cy-controls/.selection-controls. */
+  z-index: 0;
+}
+
+/* cytoscape-expand-collapse draws its +/- cue on its own full-size overlay canvas inside
+   .cy-container. It's purely decorative - actual click handling happens through
+   cytoscape's own event system on the container, not on this element - so make it
+   click-through. Without this it can end up sitting on top of (and swallowing clicks
+   meant for) the surrounding UI controls. */
+:deep(.expand-collapse-canvas) {
+  pointer-events: none;
 }
 
 .graph-tooltip {
