@@ -662,6 +662,36 @@ const initGraph = async () => {
     expandCollapseApi.collapse(toCollapse)
   }
 
+  // Dense real data can have dozens of citations between the same two collapsed clusters -
+  // each one gets its own rerouted meta-edge, which is both visual clutter and a real layout
+  // slowdown (fcose has to account for every one of them as a separate spring). Keep at most
+  // one edge per direction between any given pair of currently-visible endpoints (so at most
+  // 2 between any pair) by hiding the rest.
+  //
+  // This is deliberately NOT done via the library's own collapseAllEdges/expandAllEdges:
+  // those merge N parallel edges into a stored, separately-tracked replacement edge, but that
+  // bookkeeping doesn't cascade when a node later expands/collapses - the "restored" edge
+  // keeps stale endpoints from whenever it was merged instead of re-deriving them (confirmed
+  // by testing: expanding a cluster left its merged edge still pointing at the cluster id).
+  // Hiding is purely visual and recomputed from scratch every time, so it can't go stale: a
+  // cluster expanding back to its real per-document edges is unaffected, since those have
+  // distinct endpoints and were never hidden to begin with.
+  const dedupeParallelEdges = () => {
+    if (!cy) return
+    cy.edges('.duplicate-edge-hidden').removeClass('duplicate-edge-hidden').style('display', 'element')
+    const seenPairs = new Set<string>()
+    cy.edges().forEach(edge => {
+      const key = `${edge.source().id()}->${edge.target().id()}`
+      if (seenPairs.has(key)) {
+        edge.addClass('duplicate-edge-hidden')
+        edge.style('display', 'none')
+      } else {
+        seenPairs.add(key)
+      }
+    })
+  }
+  dedupeParallelEdges()
+
   // Run the real layout once, over just the resulting (much smaller) visible graph.
   cy.layout(layoutConfig).run()
 
@@ -669,6 +699,7 @@ const initGraph = async () => {
   // incrementally (randomize: false) so unrelated nodes don't jump around.
   const relayoutConfig = { ...layoutConfig, randomize: false, animate: true }
   cy.on('expandcollapse.aftercollapse expandcollapse.afterexpand', () => {
+    dedupeParallelEdges()
     cy?.layout(relayoutConfig).run()
   })
 
