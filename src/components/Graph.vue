@@ -255,8 +255,11 @@ const fitToView = () => {
 
 const filterSelected = () => {
   if (!cy) return
-  const selectedNodes = cy.$('node:selected')
-  
+  // Exclude cluster nodes - they can end up transiently :selected as part of showing their
+  // expand/collapse cue (see the mouseover/mouseout handlers in initGraph) and don't
+  // represent a real document to filter on anyway.
+  const selectedNodes = cy.$('node:selected[!isClusterParent]')
+
   if (selectedNodes.length === 0) return
   
   // Get the selected node IDs
@@ -275,7 +278,8 @@ const clearSelection = () => {
 
 const updateSelectionCount = () => {
   if (!cy) return
-  selectedCount.value = cy.$('node:selected').length
+  // Exclude cluster nodes - see the note in filterSelected above.
+  selectedCount.value = cy.$('node:selected[!isClusterParent]').length
 }
 
 const cyContainer = ref<HTMLElement | null>(null)
@@ -615,23 +619,34 @@ const initGraph = async () => {
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier'
         }
+      },
+      {
+        // The cue mechanism (see below) needs the node briefly :selected to draw itself,
+        // which would otherwise paint it solid black per the generic node:selected rule
+        // above - override back to its normal look so that's invisible to the user.
+        selector: 'node[?isClusterParent]:selected',
+        style: {
+          'background-color': 'data(color)',
+          'border-width': 2,
+          'border-color': 'data(color)',
+          'opacity': 1
+        }
       }
     ]
   })
 
-  // Register expand/collapse and decide which clusters start collapsed. layoutBy is left
-  // null here - we drive re-layout ourselves below for full control over when/how it runs.
-  // cueEnabled is off: the extension only draws its +/- cue on the currently *selected* node,
-  // but this graph runs with autounselectify true in View mode (selection is reserved for the
-  // separate multi-select/filter feature), so a selection-driven cue would never be visible.
-  // Clicking a cluster node to toggle it directly (see the tap handler below) sidesteps that.
+  // Register expand/collapse with its built-in +/- cue in the top-left corner of each
+  // cluster node - this is now the only way to expand/collapse (see the tap handler below,
+  // which no longer special-cases cluster nodes at all). top-left is the only position this
+  // (unmaintained) library actually implements - other values are silently a no-op.
   const expandCollapseApi = (cy as any).expandCollapse({
     layoutBy: null,
     animate: true,
     animationDuration: 300,
     undoable: false,
     fisheye: false,
-    cueEnabled: false
+    cueEnabled: true,
+    expandCollapseCuePosition: 'top-left'
   })
 
   const toCollapse = cy.nodes().filter(n => clusterIdsToCollapse.has(n.id()))
@@ -649,20 +664,11 @@ const initGraph = async () => {
     cy?.layout(relayoutConfig).run()
   })
 
-  // Handle node clicks based on mode
+  // Handle node clicks based on mode - cluster nodes behave exactly like any other node
+  // here; expand/collapse is handled entirely by the cue (see above), not by clicking the
+  // node itself.
   cy.on('tap', 'node', (event) => {
     const node = event.target
-    if (node.data('isClusterParent')) {
-      // Single click only ever expands a collapsed placeholder. While expanded, the
-      // rectangle is just a passive visual grouping around its (individually clickable)
-      // member nodes - a single click on its body/background does nothing, so it doesn't
-      // compete with its own children as an interactive element. Double-click collapses
-      // it back (see the dbltap handler below).
-      if (expandCollapseApi.isExpandable(node)) {
-        expandCollapseApi.expand(node)
-      }
-      return
-    }
     const nodeId = node.data('id')
 
     if (!selectionMode.value) {
@@ -671,14 +677,6 @@ const initGraph = async () => {
       emit('docClick', nodeId)
     }
     // If selectionMode is true, Cytoscape handles selection automatically
-  })
-
-  // Double-click a cluster to fold it back into its collapsed placeholder.
-  cy.on('dbltap', 'node', (event) => {
-    const node = event.target
-    if (node.data('isClusterParent') && expandCollapseApi.isCollapsible(node)) {
-      expandCollapseApi.collapse(node)
-    }
   })
 
   // Add selection event listeners to update count
@@ -694,13 +692,23 @@ const initGraph = async () => {
   cy.on('mouseover', 'node', (event) => {
     const node = event.target
 
-    // Every node is interactive in some way here: real docs and collapsed placeholders on
-    // single click, expanded cluster rectangles on double-click (see dbltap handler above).
     if (cyContainer.value) {
       cyContainer.value.style.cursor = 'pointer'
     }
 
-    if (node.data('isClusterParent')) return
+    if (node.data('isClusterParent')) {
+      // The expand/collapse cue only draws itself on the currently *selected* node, but
+      // View mode blocks selection outright (autounselectify) so the separate bulk
+      // multi-select/filter feature doesn't fire on every ordinary click. Briefly lift
+      // that block just long enough to select this one cluster node so its cue shows up -
+      // skip this in Selection mode, where hovering must never auto-select anything.
+      if (!selectionMode.value && cy) {
+        cy.autounselectify(false)
+        node.select()
+        cy.autounselectify(true)
+      }
+      return
+    }
     const docData = node.data('fullData')
 
     // Darken node color on hover only if not selected
@@ -781,6 +789,16 @@ const initGraph = async () => {
     // Reset cursor
     if (cyContainer.value) {
       cyContainer.value.style.cursor = 'default'
+    }
+
+    if (node.data('isClusterParent')) {
+      // Undo the select-for-cue hack from mouseover above.
+      if (!selectionMode.value && cy) {
+        cy.autounselectify(false)
+        node.unselect()
+        cy.autounselectify(true)
+      }
+      return
     }
 
     // Reset node opacity only if not selected
