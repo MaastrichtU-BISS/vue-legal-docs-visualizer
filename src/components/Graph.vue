@@ -164,8 +164,8 @@ const getIterationsForNodeCount = (nodeCount: number): number => {
 
 // A layout can only ever look clean if the number of things it has to place is small - no
 // amount of force-directed tuning fixes visual clutter once you're placing thousands of nodes
-// in one viewport. So past a certain size, clusters (same statistics.parent used for coloring)
-// start collapsed into a single placeholder node, expandable on click. Which clusters start
+// in one viewport. So past a certain size, clusters (grouped by statistics.community) start
+// collapsed into a single placeholder node, expandable on click. Which clusters start
 // collapsed depends on both the overall graph size (small graphs stay fully expanded) and each
 // cluster's own member count (bigger clusters collapse first).
 const getClusterCollapseThreshold = (totalNodeCount: number): number => {
@@ -288,10 +288,6 @@ const tooltipContent = ref({ ecli: '', title: '', summary: '', provisions: [] as
 let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
-// Grace period before hiding a cluster's expand/collapse cue on mouseout - the cue is drawn
-// just outside the node's own edge, so moving the mouse toward it briefly leaves the node's
-// hit area and would otherwise hide the cue right as the user tries to reach it.
-let clusterCueHideTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Helper function to generate distinct colors for clusters
 const generateClusterColors = (parentIds: string[]): Map<string, string> => {
@@ -325,14 +321,22 @@ const initGraph = async () => {
   await registerFcose()
   await registerExpandCollapse()
 
-  // Group docs by cluster (statistics.parent) - this is both the existing color-grouping key
-  // and the new compound-node grouping key used for expand/collapse.
+  // Group docs by cluster (statistics.community - a real community-detection cluster id).
+  // statistics.parent looks like a similar grouping field but is actually a spanning-tree
+  // pointer to another *real document's own id* - reusing it as a compound node id collided
+  // with that document's actual node (edges attaching straight to "squares", cluster clicks
+  // shadowing real document clicks). Prefixing the community number rules out any collision.
+  const getClusterKey = (doc: any): string | undefined => {
+    const community = doc.data?.statistics?.community
+    return community === undefined || community === null ? undefined : `cluster-${community}`
+  }
+
   const docsByCluster = new Map<string, any[]>()
   props.docs.forEach(doc => {
-    const parentId = doc.data?.statistics?.parent
-    if (parentId) {
-      if (!docsByCluster.has(parentId)) docsByCluster.set(parentId, [])
-      docsByCluster.get(parentId)!.push(doc)
+    const clusterKey = getClusterKey(doc)
+    if (clusterKey) {
+      if (!docsByCluster.has(clusterKey)) docsByCluster.set(clusterKey, [])
+      docsByCluster.get(clusterKey)!.push(doc)
     }
   })
   const parentColorMap = generateClusterColors(Array.from(docsByCluster.keys()))
@@ -391,7 +395,7 @@ const initGraph = async () => {
     const degree = doc.data?.statistics?.degree || 0
     const isIsolated = degree === 0
     const size = calculateNodeSize(degree)
-    const clusterId = doc.data?.statistics?.parent
+    const clusterId = getClusterKey(doc)
     const isGrouped = Boolean(clusterId && (docsByCluster.get(clusterId)?.length || 0) >= 2)
 
     let color: string
@@ -678,8 +682,8 @@ const initGraph = async () => {
   })
 
   // Handle node clicks based on mode - cluster nodes behave exactly like any other node
-  // here; expand/collapse is handled entirely by the cue (see above), not by clicking the
-  // node itself.
+  // here (same highlight + docClick emit); expand/collapse is handled entirely by the cue
+  // (see above), not by clicking the node's body.
   cy.on('tap', 'node', (event) => {
     const node = event.target
     const nodeId = node.data('id')
@@ -688,6 +692,20 @@ const initGraph = async () => {
       cy?.$('.currentShown').removeClass('currentShown')
       node.addClass('currentShown')
       emit('docClick', nodeId)
+
+      // The cue only draws itself on the currently *selected* node - select on click, the
+      // same way the library's own demo works, rather than trying to fake it on hover.
+      // View mode otherwise blocks selection outright (autounselectify) since that's
+      // reserved for the separate bulk multi-select/filter feature, so briefly lift it
+      // just long enough to apply this one selection.
+      if (cy) {
+        cy.autounselectify(false)
+        cy.$('node[?isClusterParent]:selected').unselect()
+        if (node.data('isClusterParent')) {
+          node.select()
+        }
+        cy.autounselectify(true)
+      }
     }
     // If selectionMode is true, Cytoscape handles selection automatically
   })
@@ -709,26 +727,7 @@ const initGraph = async () => {
       cyContainer.value.style.cursor = 'pointer'
     }
 
-    if (node.data('isClusterParent')) {
-      // Cancel any pending hide from a previous cluster's mouseout - lets the cue survive
-      // quickly moving from one cluster straight to another.
-      if (clusterCueHideTimeout) {
-        clearTimeout(clusterCueHideTimeout)
-        clusterCueHideTimeout = null
-      }
-      // The expand/collapse cue only draws itself on the currently *selected* node, but
-      // View mode blocks selection outright (autounselectify) so the separate bulk
-      // multi-select/filter feature doesn't fire on every ordinary click. Briefly lift
-      // that block just long enough to select this one cluster node so its cue shows up -
-      // skip this in Selection mode, where hovering must never auto-select anything.
-      if (!selectionMode.value && cy) {
-        cy.autounselectify(false)
-        cy.$('node[?isClusterParent]:selected').unselect()
-        node.select()
-        cy.autounselectify(true)
-      }
-      return
-    }
+    if (node.data('isClusterParent')) return
     const docData = node.data('fullData')
 
     // Darken node color on hover only if not selected
@@ -811,23 +810,7 @@ const initGraph = async () => {
       cyContainer.value.style.cursor = 'default'
     }
 
-    if (node.data('isClusterParent')) {
-      // Undo the select-for-cue hack from mouseover above, but not immediately - the cue
-      // sits just outside the node's edge, so moving the mouse toward it means briefly
-      // leaving the node's hit area. Give it a short grace period so that transit doesn't
-      // hide the cue right as the user reaches for it; mouseover on this (or another)
-      // cluster cancels the pending hide.
-      if (!selectionMode.value && cy) {
-        clusterCueHideTimeout = setTimeout(() => {
-          if (!cy) return
-          cy.autounselectify(false)
-          node.unselect()
-          cy.autounselectify(true)
-          clusterCueHideTimeout = null
-        }, 250)
-      }
-      return
-    }
+    if (node.data('isClusterParent')) return
 
     // Reset node opacity only if not selected
     if (!node.selected()) {
