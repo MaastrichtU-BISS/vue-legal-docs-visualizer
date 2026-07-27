@@ -692,15 +692,26 @@ const initGraph = async () => {
   }
   dedupeParallelEdges()
 
+  // display:none alone stops these edges from being drawn, but fcose still counts every
+  // hidden edge as an active spring during its physics computation (verified by reading its
+  // source - it only filters out hidden elements much later, when writing final positions
+  // back onto nodes, which happens well after the actual force iterations run). Passing an
+  // explicit, smaller `eles` here excludes them from that computation too - this is safe
+  // (no cy.remove() involved) and doesn't touch cytoscape-expand-collapse's own bookkeeping,
+  // unlike collapseAllEdges().
+  const getLayoutEles = () => cy!.elements().not('.duplicate-edge-hidden')
+
   // Run the real layout once, over just the resulting (much smaller) visible graph.
-  cy.layout(layoutConfig).run()
+  // eles isn't in @types/cytoscape's LayoutOptions even though the layouts themselves
+  // support it (verified directly in cytoscape-fcose's source) - cast to work around that.
+  cy.layout({ ...layoutConfig, eles: getLayoutEles() } as any).run()
 
   // Whenever the user manually expands/collapses a cluster by clicking it, re-layout
   // incrementally (randomize: false) so unrelated nodes don't jump around.
   const relayoutConfig = { ...layoutConfig, randomize: false, animate: true }
   cy.on('expandcollapse.aftercollapse expandcollapse.afterexpand', () => {
     dedupeParallelEdges()
-    cy?.layout(relayoutConfig).run()
+    cy?.layout({ ...relayoutConfig, eles: getLayoutEles() } as any).run()
   })
 
   // The library only redraws the cue's position on pan/zoom after its own internal 100ms
