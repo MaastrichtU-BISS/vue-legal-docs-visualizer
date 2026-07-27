@@ -288,6 +288,10 @@ const tooltipContent = ref({ ecli: '', title: '', summary: '', provisions: [] as
 let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
+// Grace period before hiding a cluster's expand/collapse cue on mouseout - the cue is drawn
+// just outside the node's own edge, so moving the mouse toward it briefly leaves the node's
+// hit area and would otherwise hide the cue right as the user tries to reach it.
+let clusterCueHideTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Helper function to generate distinct colors for clusters
 const generateClusterColors = (parentIds: string[]): Map<string, string> => {
@@ -664,6 +668,15 @@ const initGraph = async () => {
     cy?.layout(relayoutConfig).run()
   })
 
+  // The library only redraws the cue's position on pan/zoom after its own internal 100ms
+  // debounce, so it visibly lags behind the node during a drag/scroll. Force an immediate,
+  // un-debounced redraw on every pan/zoom tick instead - eSelect is the same redraw function
+  // the library itself calls, just without waiting for things to settle first.
+  cy.on('pan zoom', () => {
+    const cueUtilities = (cy as any)?.scratch('_cyExpandCollapse')?.cueUtilities
+    cueUtilities?.eSelect?.()
+  })
+
   // Handle node clicks based on mode - cluster nodes behave exactly like any other node
   // here; expand/collapse is handled entirely by the cue (see above), not by clicking the
   // node itself.
@@ -697,6 +710,12 @@ const initGraph = async () => {
     }
 
     if (node.data('isClusterParent')) {
+      // Cancel any pending hide from a previous cluster's mouseout - lets the cue survive
+      // quickly moving from one cluster straight to another.
+      if (clusterCueHideTimeout) {
+        clearTimeout(clusterCueHideTimeout)
+        clusterCueHideTimeout = null
+      }
       // The expand/collapse cue only draws itself on the currently *selected* node, but
       // View mode blocks selection outright (autounselectify) so the separate bulk
       // multi-select/filter feature doesn't fire on every ordinary click. Briefly lift
@@ -704,6 +723,7 @@ const initGraph = async () => {
       // skip this in Selection mode, where hovering must never auto-select anything.
       if (!selectionMode.value && cy) {
         cy.autounselectify(false)
+        cy.$('node[?isClusterParent]:selected').unselect()
         node.select()
         cy.autounselectify(true)
       }
@@ -792,11 +812,19 @@ const initGraph = async () => {
     }
 
     if (node.data('isClusterParent')) {
-      // Undo the select-for-cue hack from mouseover above.
+      // Undo the select-for-cue hack from mouseover above, but not immediately - the cue
+      // sits just outside the node's edge, so moving the mouse toward it means briefly
+      // leaving the node's hit area. Give it a short grace period so that transit doesn't
+      // hide the cue right as the user reaches for it; mouseover on this (or another)
+      // cluster cancels the pending hide.
       if (!selectionMode.value && cy) {
-        cy.autounselectify(false)
-        node.unselect()
-        cy.autounselectify(true)
+        clusterCueHideTimeout = setTimeout(() => {
+          if (!cy) return
+          cy.autounselectify(false)
+          node.unselect()
+          cy.autounselectify(true)
+          clusterCueHideTimeout = null
+        }, 250)
       }
       return
     }
