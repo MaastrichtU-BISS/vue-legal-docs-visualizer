@@ -420,6 +420,15 @@ const initGraph = async () => {
 
   const allNodes = [...clusterParentNodes, ...nodes]
 
+  // Real doc id -> the cluster id it's actually compounded into (only set for docs whose
+  // cluster was big enough to get its own compound node - mirrors `isGrouped` above). Used by
+  // dedupeParallelEdges below to tell whether an edge touches a cluster at all, independent of
+  // whether that cluster happens to be collapsed or expanded right now.
+  const docIdToClusterId = new Map<string, string>()
+  nodes.forEach(n => {
+    if (n.data.parent) docIdToClusterId.set(n.data.id, n.data.parent)
+  })
+
   // Create edges - prefer the authoritative edges array when provided, falling back to
   // reconstructing from each doc's cites/cited_by (which ECHR documents don't populate).
   const edges: any[] = []
@@ -663,26 +672,49 @@ const initGraph = async () => {
     expandCollapseApi.collapse(toCollapse)
   }
 
-  // Dense real data can have dozens of citations between the same two collapsed clusters -
-  // each one gets its own rerouted meta-edge, which is both visual clutter and a real layout
-  // slowdown (fcose has to account for every one of them as a separate spring). Keep at most
-  // one edge per direction between any given pair of currently-visible endpoints (so at most
-  // 2 between any pair) by hiding the rest.
+  // Dense real data can have dozens of citations between the same two clusters - each one
+  // gets its own edge (rerouted to a meta-edge for whichever side is collapsed), which is both
+  // visual clutter and a real layout slowdown (fcose has to account for every one of them as a
+  // separate spring). Keep at most one edge per direction between any given pair (so at most 2
+  // between any pair) by hiding the rest, whenever showing every individual citation wouldn't
+  // convey more than the collapsed placeholder already does.
   //
   // This is deliberately NOT done via the library's own collapseAllEdges/expandAllEdges:
   // those merge N parallel edges into a stored, separately-tracked replacement edge, but that
   // bookkeeping doesn't cascade when a node later expands/collapses - the "restored" edge
   // keeps stale endpoints from whenever it was merged instead of re-deriving them (confirmed
   // by testing: expanding a cluster left its merged edge still pointing at the cluster id).
-  // Hiding is purely visual and recomputed from scratch every time, so it can't go stale: a
-  // cluster expanding back to its real per-document edges is unaffected, since those have
-  // distinct endpoints and were never hidden to begin with.
+  // Hiding is purely visual and recomputed from scratch every time, so it can't go stale.
   const dedupeParallelEdges = () => {
     if (!cy) return
     cy.edges('.duplicate-edge-hidden').removeClass('duplicate-edge-hidden').style('display', 'element')
+
+    const collapsedClusterIds = new Set(cy.nodes('.cy-expand-collapse-collapsed-node').map(n => n.id()))
+
+    // An edge's dedup key is normally just its own real endpoints, so distinct per-document
+    // citations stay distinct - that's what we want once both sides are individually visible
+    // (either a fully-expanded cluster's members, or a non-clustered doc). But as soon as
+    // *either* side belongs to a currently-collapsed cluster, per-document detail on that side
+    // is already gone from the view (collapsed down to one placeholder), so there's no reason
+    // to keep every citation into/out of it distinct on the *other* side either - key by
+    // cluster id on both sides instead (falling back to the real node id for a side that isn't
+    // part of any cluster), so every citation between the two clusters collapses down to at
+    // most one edge per direction. Only when both clusters in question are expanded do we fall
+    // through to the real per-document key and show every real citation.
     const seenPairs = new Set<string>()
     cy.edges().forEach(edge => {
-      const key = `${edge.source().id()}->${edge.target().id()}`
+      const sourceId = edge.source().id()
+      const targetId = edge.target().id()
+      const sourceCluster = collapsedClusterIds.has(sourceId) ? sourceId : docIdToClusterId.get(sourceId)
+      const targetCluster = collapsedClusterIds.has(targetId) ? targetId : docIdToClusterId.get(targetId)
+      const collapseInvolved =
+        (sourceCluster !== undefined && collapsedClusterIds.has(sourceCluster)) ||
+        (targetCluster !== undefined && collapsedClusterIds.has(targetCluster))
+
+      const key = collapseInvolved && sourceCluster !== undefined && targetCluster !== undefined && sourceCluster !== targetCluster
+        ? `${sourceCluster}->${targetCluster}`
+        : `${sourceId}->${targetId}`
+
       if (seenPairs.has(key)) {
         edge.addClass('duplicate-edge-hidden')
         edge.style('display', 'none')
