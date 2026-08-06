@@ -30,13 +30,20 @@
         rounded 
         @click="zoomIn"
         v-tooltip="'Zoom In'" />
-      <Button 
-        icon="pi pi-arrows-alt" 
-        severity="secondary" 
-        size="small" 
-        rounded 
+      <Button
+        icon="pi pi-arrows-alt"
+        severity="secondary"
+        size="small"
+        rounded
         @click="fitToView"
         v-tooltip="'Fit to View'" />
+      <Button
+        :icon="hasCollapsedClusters ? 'pi pi-plus-circle' : 'pi pi-minus-circle'"
+        severity="secondary"
+        size="small"
+        rounded
+        @click="toggleAllClusters"
+        v-tooltip="hasCollapsedClusters ? 'Expand All Clusters' : 'Collapse All Clusters'" />
     </div>
     <div ref="cyContainer" class="cy-container"></div>
     <div ref="tooltip" class="graph-tooltip">
@@ -235,8 +242,11 @@ const applyFilters = () => {
     }
   })
 
-  // Also manage edge visibility
-  const edges = cy.edges()
+  // Also manage edge visibility - only for real per-document edges. Fictional cluster-to-
+  // cluster edges and the library's own meta-edges have their own visibility rules tied to
+  // collapse state (see updateClusterEdgeVisibility/the stylesheet), unrelated to search -
+  // recomputing them here from endpoint visibility alone would fight with that.
+  const edges = cy.edges('[!isFictionalClusterEdge]').not('.cy-expand-collapse-meta-edge')
   edges.forEach(edge => {
     if (edge.source().style('display') !== 'none' && edge.target().style('display') !== 'none') {
       edge.style('display', 'element')
@@ -260,6 +270,21 @@ const zoomOut = () => {
 const fitToView = () => {
   if (!cy) return
   cy.fit()
+}
+
+const hasCollapsedClusters = ref(false)
+
+const updateHasCollapsedClusters = () => {
+  hasCollapsedClusters.value = !!cy && cy.nodes('.cy-expand-collapse-collapsed-node').length > 0
+}
+
+const toggleAllClusters = () => {
+  if (!cy || !expandCollapseApi) return
+  if (hasCollapsedClusters.value) {
+    expandCollapseApi.expandAll()
+  } else {
+    expandCollapseApi.collapseAll()
+  }
 }
 
 const filterSelected = () => {
@@ -310,6 +335,7 @@ let expandCollapseApi: any = null
 let hoveredClusterNode: any = null
 let clusterPopper: any = null
 let clusterHideTimeout: ReturnType<typeof setTimeout> | null = null
+let clusterShowTimeout: ReturnType<typeof setTimeout> | null = null
 
 const updateClusterPopperPosition = () => {
   if (clusterPopper?.update) clusterPopper.update()
@@ -319,6 +345,10 @@ const hideClusterTooltip = () => {
   if (clusterHideTimeout) {
     clearTimeout(clusterHideTimeout)
     clusterHideTimeout = null
+  }
+  if (clusterShowTimeout) {
+    clearTimeout(clusterShowTimeout)
+    clusterShowTimeout = null
   }
   if (clusterTooltip.value) {
     clusterTooltip.value.style.display = 'none'
@@ -344,6 +374,35 @@ const cancelClusterHide = () => {
     clearTimeout(clusterHideTimeout)
     clusterHideTimeout = null
   }
+}
+
+const cancelPendingClusterShow = () => {
+  if (clusterShowTimeout) {
+    clearTimeout(clusterShowTimeout)
+    clusterShowTimeout = null
+  }
+}
+
+// Two overlapping clusters can put one cluster's popup visually on top of the *other*
+// cluster's node - so the straight-line path from the hovered node to its own popup can cross
+// over that other node first. Showing a new popup immediately on mouseover would yank the
+// first one away mid-transit, before the user ever reaches its buttons. Instead, wait for a
+// short sustained hover before switching - a brief pass-through cancels via the mouseout
+// handler below (cancelPendingClusterShow) before it ever fires, so it's a no-op.
+const scheduleShowClusterTooltip = (node: any) => {
+  if (clusterHideTimeout) {
+    clearTimeout(clusterHideTimeout)
+    clusterHideTimeout = null
+  }
+  if (hoveredClusterNode && hoveredClusterNode.id() === node.id() && clusterPopper) {
+    cancelPendingClusterShow()
+    return
+  }
+  cancelPendingClusterShow()
+  clusterShowTimeout = setTimeout(() => {
+    clusterShowTimeout = null
+    showClusterTooltip(node)
+  }, 200)
 }
 
 const showClusterTooltip = (node: any) => {
@@ -543,6 +602,19 @@ const initGraph = async () => {
   const edges: any[] = []
   const addedEdges = new Set<string>() // To avoid duplicate edges
 
+  // Directed cluster-pair keys ("clusterA->clusterB") that have at least one real citation
+  // between their members - turned into one fictional cluster-to-cluster edge per direction
+  // actually present, further down. Shown instead of the real per-document edges whenever
+  // either cluster is collapsed (see updateClusterEdgeVisibility).
+  const clusterEdgeDirections = new Set<string>()
+  const recordClusterPair = (sourceId: string, targetId: string) => {
+    const sourceCluster = docIdToClusterId.get(sourceId)
+    const targetCluster = docIdToClusterId.get(targetId)
+    if (sourceCluster && targetCluster && sourceCluster !== targetCluster) {
+      clusterEdgeDirections.add(`${sourceCluster}->${targetCluster}`)
+    }
+  }
+
   if (props.edges) {
     props.edges.forEach(edge => {
       if (validNodeIds.has(edge.source) && validNodeIds.has(edge.target)) {
@@ -556,6 +628,7 @@ const initGraph = async () => {
             }
           })
           addedEdges.add(edgeId)
+          recordClusterPair(edge.source, edge.target)
         }
       }
     })
@@ -578,6 +651,7 @@ const initGraph = async () => {
                 }
               })
               addedEdges.add(edgeId)
+              recordClusterPair(sourceId, targetId)
             }
           }
         })
@@ -598,12 +672,20 @@ const initGraph = async () => {
                 }
               })
               addedEdges.add(edgeId)
+              recordClusterPair(targetId, sourceId)
             }
           }
         })
       }
     })
   }
+
+  clusterEdgeDirections.forEach(pairKey => {
+    const [source, target] = pairKey.split('->')
+    edges.push({
+      data: { id: `fictional-cluster-edge:${pairKey}`, source, target, isFictionalClusterEdge: true }
+    })
+  })
 
   // fcose scales far better than core cose - near-linear instead of O(n^2) per iteration -
   // and natively packs disconnected components/isolated nodes into a tidy grid (packComponents
@@ -736,8 +818,22 @@ const initGraph = async () => {
         }
       },
       {
-        // Meta-edges: edges rerouted to/from a collapsed cluster's placeholder node.
+        // The library's own meta-edges (auto-created whenever a real per-document edge
+        // crosses into a collapsed cluster) are superseded by the fictional cluster-to-cluster
+        // edges below, which convey the same "these two clusters are connected" information
+        // without misleadingly anchoring at whichever specific member happened to survive
+        // rerouting - hide them (updateClusterEdgeVisibility handles the fictional ones).
         selector: 'edge.cy-expand-collapse-meta-edge',
+        style: {
+          'display': 'none'
+        }
+      },
+      {
+        // Fictional cluster-to-cluster edge: a synthetic connection directly between two
+        // cluster parent nodes, not any specific document - shown instead of the real
+        // per-document edges whenever at least one of the two clusters is collapsed (see
+        // updateClusterEdgeVisibility). Dashed to read as a summary, not a literal citation.
+        selector: 'edge[?isFictionalClusterEdge]',
         style: {
           'line-style': 'dashed',
           'width': 2,
@@ -784,66 +880,40 @@ const initGraph = async () => {
   }
 
   // Dense real data can have dozens of citations between the same two clusters - each one
-  // gets its own edge (rerouted to a meta-edge for whichever side is collapsed), which is both
-  // visual clutter and a real layout slowdown (fcose has to account for every one of them as a
-  // separate spring). Keep at most one edge per direction between any given pair (so at most 2
-  // between any pair) by hiding the rest, whenever showing every individual citation wouldn't
-  // convey more than the collapsed placeholder already does.
+  // would otherwise render as its own edge (rerouted to a meta-edge for whichever side is
+  // collapsed), which is both visual clutter and a real layout slowdown (fcose has to account
+  // for every one of them as a separate spring). Once a cluster is collapsed, per-document
+  // detail on that side is already gone from the view anyway, so a single fictional
+  // cluster-to-cluster edge per direction (built above, alongside the real edges) conveys the
+  // same "these two clusters are connected" information without a misleading real edge landing
+  // on whichever specific member happened to survive rerouting. Toggle those fictional edges
+  // on/off here based on current collapse state.
   //
-  // This is deliberately NOT done via the library's own collapseAllEdges/expandAllEdges:
-  // those merge N parallel edges into a stored, separately-tracked replacement edge, but that
+  // This is deliberately NOT done via the library's own collapseAllEdges/expandAllEdges: those
+  // merge N parallel edges into a stored, separately-tracked replacement edge, but that
   // bookkeeping doesn't cascade when a node later expands/collapses - the "restored" edge
   // keeps stale endpoints from whenever it was merged instead of re-deriving them (confirmed
   // by testing: expanding a cluster left its merged edge still pointing at the cluster id).
-  // Hiding is purely visual and recomputed from scratch every time, so it can't go stale.
-  const dedupeParallelEdges = () => {
+  const updateClusterEdgeVisibility = () => {
     if (!cy) return
-    cy.edges('.duplicate-edge-hidden').removeClass('duplicate-edge-hidden').style('display', 'element')
-
     const collapsedClusterIds = new Set(cy.nodes('.cy-expand-collapse-collapsed-node').map(n => n.id()))
-
-    // An edge's dedup key is normally just its own real endpoints, so distinct per-document
-    // citations stay distinct - that's what we want once both sides are individually visible
-    // (either a fully-expanded cluster's members, or a non-clustered doc). But as soon as
-    // *either* side belongs to a currently-collapsed cluster, per-document detail on that side
-    // is already gone from the view (collapsed down to one placeholder), so there's no reason
-    // to keep every citation into/out of it distinct on the *other* side either - key by
-    // cluster id on both sides instead (falling back to the real node id for a side that isn't
-    // part of any cluster), so every citation between the two clusters collapses down to at
-    // most one edge per direction. Only when both clusters in question are expanded do we fall
-    // through to the real per-document key and show every real citation.
-    const seenPairs = new Set<string>()
-    cy.edges().forEach(edge => {
-      const sourceId = edge.source().id()
-      const targetId = edge.target().id()
-      const sourceCluster = collapsedClusterIds.has(sourceId) ? sourceId : docIdToClusterId.get(sourceId)
-      const targetCluster = collapsedClusterIds.has(targetId) ? targetId : docIdToClusterId.get(targetId)
-      const collapseInvolved =
-        (sourceCluster !== undefined && collapsedClusterIds.has(sourceCluster)) ||
-        (targetCluster !== undefined && collapsedClusterIds.has(targetCluster))
-
-      const key = collapseInvolved && sourceCluster !== undefined && targetCluster !== undefined && sourceCluster !== targetCluster
-        ? `${sourceCluster}->${targetCluster}`
-        : `${sourceId}->${targetId}`
-
-      if (seenPairs.has(key)) {
-        edge.addClass('duplicate-edge-hidden')
-        edge.style('display', 'none')
-      } else {
-        seenPairs.add(key)
-      }
+    cy.edges('[?isFictionalClusterEdge]').forEach(edge => {
+      const collapseInvolved = collapsedClusterIds.has(edge.data('source')) || collapsedClusterIds.has(edge.data('target'))
+      edge.style('display', collapseInvolved ? 'element' : 'none')
     })
+    // Real per-document edges need no handling here: cytoscape already skips drawing an edge
+    // whenever either of its real endpoints is hidden (i.e. a document inside a collapsed
+    // cluster), and the library's own meta-edge reroutes are hidden via the stylesheet.
   }
-  dedupeParallelEdges()
+  updateClusterEdgeVisibility()
+  updateHasCollapsedClusters()
 
-  // display:none alone stops these edges from being drawn, but fcose still counts every
-  // hidden edge as an active spring during its physics computation (verified by reading its
-  // source - it only filters out hidden elements much later, when writing final positions
-  // back onto nodes, which happens well after the actual force iterations run). Passing an
-  // explicit, smaller `eles` here excludes them from that computation too - this is safe
-  // (no cy.remove() involved) and doesn't touch cytoscape-expand-collapse's own bookkeeping,
-  // unlike collapseAllEdges().
-  const getLayoutEles = () => cy!.elements().not('.duplicate-edge-hidden')
+  // Anything cytoscape isn't currently drawing (a document hidden inside a collapsed cluster,
+  // a hidden meta-edge, a fictional cluster edge that's toggled off) should also be excluded
+  // from fcose's physics computation, not just its rendering - fcose only filters hidden
+  // elements out much later (when writing final positions back onto nodes), well after the
+  // costly force iterations already ran (verified by reading its source).
+  const getLayoutEles = () => cy!.elements().filter(ele => ele.style('display') !== 'none')
 
   // Run the real layout once, over just the resulting (much smaller) visible graph.
   // eles isn't in @types/cytoscape's LayoutOptions even though the layouts themselves
@@ -854,7 +924,8 @@ const initGraph = async () => {
   // incrementally (randomize: false) so unrelated nodes don't jump around.
   const relayoutConfig = { ...layoutConfig, randomize: false, animate: true }
   cy.on('expandcollapse.aftercollapse expandcollapse.afterexpand', () => {
-    dedupeParallelEdges()
+    updateClusterEdgeVisibility()
+    updateHasCollapsedClusters()
     cy?.layout({ ...relayoutConfig, eles: getLayoutEles() } as any).run()
   })
 
@@ -872,11 +943,12 @@ const initGraph = async () => {
   // Cluster hover: show the Expand/Collapse + Summary popup instead of the built-in cue.
   cy.on('mouseover', 'node[?isClusterParent]', (event) => {
     if (cyContainer.value) cyContainer.value.style.cursor = 'pointer'
-    showClusterTooltip(event.target)
+    scheduleShowClusterTooltip(event.target)
   })
 
   cy.on('mouseout', 'node[?isClusterParent]', () => {
     if (cyContainer.value) cyContainer.value.style.cursor = 'default'
+    cancelPendingClusterShow()
     scheduleHideClusterTooltip()
   })
 
