@@ -124,9 +124,13 @@ const topCounts = (pick: (doc: LegalDocument) => (string | undefined | null)[] |
     .slice(0, limit)
 }
 
+// ECHR's primary date is date_judgment - date_decision there maps to a different, often
+// absent field, so checking date_decision first (as Rechtspraak does) would miss it.
 const getYear = (doc: LegalDocument): number | null => {
   const data = doc.data as any
-  const dateStr = data?.date_decision || data?.date_judgment || data?.date_published
+  const dateStr = isEchrDocument(doc)
+    ? (data?.date_judgment || data?.date_decision)
+    : (data?.date_decision || data?.date_published)
   if (!dateStr) return null
   const year = parseInt(String(dateStr).slice(0, 4), 10)
   return Number.isFinite(year) ? year : null

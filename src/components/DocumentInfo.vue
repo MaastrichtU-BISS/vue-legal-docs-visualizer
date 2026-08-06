@@ -20,9 +20,9 @@
             <div class="info-section" v-if="document.data">
                 <h3 class="section-title">Basic Information</h3>
                 
-                <div class="info-field" v-if="document.data.date_decision">
+                <div class="info-field" v-if="displayDate">
                     <span class="field-label">Date:</span>
-                    <span class="field-value">{{ document.data.date_decision }}</span>
+                    <span class="field-value">{{ displayDate }}</span>
                 </div>
 
                 <template v-if="rsData">
@@ -190,6 +190,13 @@ const rsData = computed<RechtspraakDocumentData | null>(() =>
 
 const echrData = computed<EchrDocumentData | null>(() =>
     props.document && isEchrDocument(props.document) ? props.document.data as EchrDocumentData : null
+)
+
+// ECHR's primary date is date_judgment - date_decision there maps to a different, often
+// absent field, so relying on date_decision alone (as Rechtspraak does) silently drops the
+// date for most real ECHR documents.
+const displayDate = computed<string | null>(() =>
+    echrData.value ? (echrData.value.date_judgment || echrData.value.date_decision || null) : (rsData.value?.date_decision || null)
 )
 
 // Prefer the authoritative edges array when provided (ECHR documents don't populate
