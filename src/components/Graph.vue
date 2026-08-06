@@ -48,6 +48,14 @@
       </ul>
       <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
     </div>
+    <div
+      ref="clusterTooltip"
+      class="cluster-tooltip"
+      @mouseenter="cancelClusterHide"
+      @mouseleave="scheduleHideClusterTooltip">
+      <Button :label="clusterActionLabel" size="small" severity="secondary" @click="onClusterToggle" />
+      <Button label="Summary" size="small" severity="primary" @click="onClusterSummary" />
+    </div>
     <div class="selection-controls">
       <div class="selection-info">
         <span v-tooltip="{ value: 'View Mode: Click nodes to view details. \n\nSelection Mode: Click/drag to select multiple nodes (panning disabled).', pt: { root: { style: 'max-width: 250px' } } }">
@@ -290,6 +298,107 @@ let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
 
+// Cluster hover popup (Expand/Collapse + Summary) - replaces cytoscape-expand-collapse's own
+// +/- cue, which draws itself on a canvas overlay using its own bounding-box/coordinate math
+// that drifts out of sync with the node on zoom and sometimes fails to redraw at all. Real DOM
+// buttons positioned by the same popper.js already used for the doc tooltip above sidestep all
+// of that - no canvas hit-testing, no synthetic coordinate math, just an ordinary hoverable menu.
+const clusterTooltip = ref<HTMLElement | null>(null)
+const clusterActionLabel = ref('Collapse')
+let docsByCluster = new Map<string, any[]>()
+let expandCollapseApi: any = null
+let hoveredClusterNode: any = null
+let clusterPopper: any = null
+let clusterHideTimeout: ReturnType<typeof setTimeout> | null = null
+
+const updateClusterPopperPosition = () => {
+  if (clusterPopper?.update) clusterPopper.update()
+}
+
+const hideClusterTooltip = () => {
+  if (clusterHideTimeout) {
+    clearTimeout(clusterHideTimeout)
+    clusterHideTimeout = null
+  }
+  if (clusterTooltip.value) {
+    clusterTooltip.value.style.display = 'none'
+    clusterTooltip.value.style.opacity = '0'
+  }
+  if (clusterPopper) {
+    if (clusterPopper.destroy) clusterPopper.destroy()
+    clusterPopper = null
+  }
+  hoveredClusterNode = null
+  cy?.off('pan zoom resize', updateClusterPopperPosition)
+}
+
+// Small delay before hiding so the mouse has time to travel from the node onto the popup
+// itself - cancelClusterHide (bound to the popup's own @mouseenter) aborts it if it does.
+const scheduleHideClusterTooltip = () => {
+  if (clusterHideTimeout) clearTimeout(clusterHideTimeout)
+  clusterHideTimeout = setTimeout(hideClusterTooltip, 200)
+}
+
+const cancelClusterHide = () => {
+  if (clusterHideTimeout) {
+    clearTimeout(clusterHideTimeout)
+    clusterHideTimeout = null
+  }
+}
+
+const showClusterTooltip = (node: any) => {
+  if (clusterHideTimeout) {
+    clearTimeout(clusterHideTimeout)
+    clusterHideTimeout = null
+  }
+  if (hoveredClusterNode && hoveredClusterNode.id() === node.id() && clusterPopper) return
+
+  if (clusterPopper) {
+    if (clusterPopper.destroy) clusterPopper.destroy()
+    clusterPopper = null
+  }
+
+  hoveredClusterNode = node
+  clusterActionLabel.value = node.hasClass('cy-expand-collapse-collapsed-node') ? 'Expand' : 'Collapse'
+
+  if (!clusterTooltip.value) return
+
+  clusterPopper = (node as any).popper({
+    content: clusterTooltip.value,
+    popper: {
+      placement: 'top',
+      modifiers: [
+        { name: 'offset', options: { offset: [0, 12] } },
+        { name: 'preventOverflow', options: { boundary: cyContainer.value, padding: 10 } },
+        { name: 'flip', options: { fallbackPlacements: ['bottom', 'left', 'right'] } }
+      ]
+    }
+  })
+
+  clusterTooltip.value.style.display = 'flex'
+  clusterTooltip.value.style.opacity = '1'
+
+  cy?.on('pan zoom resize', updateClusterPopperPosition)
+}
+
+const onClusterToggle = () => {
+  if (!hoveredClusterNode || !expandCollapseApi) return
+  const node = hoveredClusterNode
+  if (node.hasClass('cy-expand-collapse-collapsed-node')) {
+    expandCollapseApi.expand(node)
+  } else {
+    expandCollapseApi.collapse(node)
+  }
+  hideClusterTooltip()
+}
+
+const onClusterSummary = () => {
+  if (!hoveredClusterNode) return
+  const clusterId = hoveredClusterNode.data('id')
+  emit('clusterClick', { clusterId, documents: docsByCluster.get(clusterId) || [] })
+  hideClusterTooltip()
+}
+
 // Helper function to generate distinct colors for clusters
 const generateClusterColors = (parentIds: string[]): Map<string, string> => {
   const colorMap = new Map<string, string>()
@@ -332,7 +441,7 @@ const initGraph = async () => {
     return community === undefined || community === null ? undefined : `cluster-${community}`
   }
 
-  const docsByCluster = new Map<string, any[]>()
+  docsByCluster = new Map<string, any[]>()
   props.docs.forEach(doc => {
     const clusterKey = getClusterKey(doc)
     if (clusterKey) {
@@ -639,9 +748,10 @@ const initGraph = async () => {
         }
       },
       {
-        // The cue mechanism (see below) needs the node briefly :selected to draw itself,
-        // which would otherwise paint it solid black per the generic node:selected rule
-        // above - override back to its normal look so that's invisible to the user.
+        // A cluster can still end up :selected via box-selection in selection mode (it's
+        // excluded from the selection *count*, but cytoscape still applies the class) -
+        // override back to its normal look instead of the generic node:selected rule's
+        // solid black, which would otherwise make it look broken/highlighted for no reason.
         selector: 'node[?isClusterParent]:selected',
         style: {
           'background-color': 'data(color)',
@@ -653,18 +763,19 @@ const initGraph = async () => {
     ]
   })
 
-  // Register expand/collapse with its built-in +/- cue in the top-left corner of each
-  // cluster node - this is now the only way to expand/collapse (see the tap handler below,
-  // which no longer special-cases cluster nodes at all). top-left is the only position this
-  // (unmaintained) library actually implements - other values are silently a no-op.
-  const expandCollapseApi = (cy as any).expandCollapse({
+  // Register expand/collapse itself, but with its own +/- cue disabled (cueEnabled: false) -
+  // that cue draws on a canvas overlay using its own bounding-box math, which drifts out of
+  // sync with the node on zoom and sometimes fails to redraw at all (confirmed both bugs by
+  // testing). Expand/collapse is now driven entirely through the hover popup's buttons (see
+  // showClusterTooltip/onClusterToggle above), calling expandCollapseApi.collapse()/.expand()
+  // directly - those methods work independently of the cue.
+  expandCollapseApi = (cy as any).expandCollapse({
     layoutBy: null,
     animate: true,
     animationDuration: 300,
     undoable: false,
     fisheye: false,
-    cueEnabled: true,
-    expandCollapseCuePosition: 'top-left'
+    cueEnabled: false
   })
 
   const toCollapse = cy.nodes().filter(n => clusterIdsToCollapse.has(n.id()))
@@ -747,65 +858,26 @@ const initGraph = async () => {
     cy?.layout({ ...relayoutConfig, eles: getLayoutEles() } as any).run()
   })
 
-  // The library only redraws the cue's position on pan/zoom after its own internal 100ms
-  // debounce, so it visibly lags behind the node during a drag/scroll. Force an immediate,
-  // un-debounced redraw on every pan/zoom tick instead - eSelect is the same redraw function
-  // the library itself calls, just without waiting for things to settle first.
-  cy.on('pan zoom', () => {
-    const cueUtilities = (cy as any)?.scratch('_cyExpandCollapse')?.cueUtilities
-    cueUtilities?.eSelect?.()
+  // Cluster interaction now happens entirely through the hover popup (Expand/Collapse +
+  // Summary buttons, see showClusterTooltip above) - tapping a cluster's body no longer does
+  // anything special, only real document nodes respond to tap.
+  cy.on('tap', 'node[!isClusterParent]', (event) => {
+    if (selectionMode.value) return
+    const node = event.target
+    cy?.$('.currentShown').removeClass('currentShown')
+    node.addClass('currentShown')
+    emit('docClick', node.data('id'))
   })
 
-  // The cue overlay canvas is pointer-events:none (see the stylesheet), so a click on the
-  // cue icon itself passes through to the node underneath and reaches this same 'tap'
-  // handler - replicate the library's own cue hit-test (using the bounds it stores on the
-  // node when it last drew the cue) so we can tell "clicked the cue" apart from "clicked
-  // the cluster body" and only open the preview modal for the latter.
-  const isCueClick = (node: any, event: any): boolean => {
-    const cueSize = node.data('expandcollapseRenderedCueSize')
-    const startX = node.data('expandcollapseRenderedStartX')
-    const startY = node.data('expandcollapseRenderedStartY')
-    if (!cueSize || startX == null || startY == null) return false
-    const pos = event.renderedPosition || event.cyRenderedPosition
-    if (!pos) return false
-    return pos.x >= startX && pos.x <= startX + cueSize && pos.y >= startY && pos.y <= startY + cueSize
-  }
+  // Cluster hover: show the Expand/Collapse + Summary popup instead of the built-in cue.
+  cy.on('mouseover', 'node[?isClusterParent]', (event) => {
+    if (cyContainer.value) cyContainer.value.style.cursor = 'pointer'
+    showClusterTooltip(event.target)
+  })
 
-  // Handle node clicks based on mode. Clicking a cluster's body (not its +/- cue) opens the
-  // cluster preview modal instead of the normal doc-click behavior, since a cluster id isn't
-  // a real document - there's nothing for DocumentInfo to show for it. docsByCluster is the
-  // same grouping already computed above for the compound nodes themselves.
-  cy.on('tap', 'node', (event) => {
-    const node = event.target
-    const nodeId = node.data('id')
-
-    if (!selectionMode.value) {
-      cy?.$('.currentShown').removeClass('currentShown')
-      node.addClass('currentShown')
-
-      if (node.data('isClusterParent')) {
-        if (!isCueClick(node, event)) {
-          emit('clusterClick', { clusterId: nodeId, documents: docsByCluster.get(nodeId) || [] })
-        }
-      } else {
-        emit('docClick', nodeId)
-      }
-
-      // The cue only draws itself on the currently *selected* node - select on click, the
-      // same way the library's own demo works, rather than trying to fake it on hover.
-      // View mode otherwise blocks selection outright (autounselectify) since that's
-      // reserved for the separate bulk multi-select/filter feature, so briefly lift it
-      // just long enough to apply this one selection.
-      if (cy) {
-        cy.autounselectify(false)
-        cy.$('node[?isClusterParent]:selected').unselect()
-        if (node.data('isClusterParent')) {
-          node.select()
-        }
-        cy.autounselectify(true)
-      }
-    }
-    // If selectionMode is true, Cytoscape handles selection automatically
+  cy.on('mouseout', 'node[?isClusterParent]', () => {
+    if (cyContainer.value) cyContainer.value.style.cursor = 'default'
+    scheduleHideClusterTooltip()
   })
 
   // Add selection event listeners to update count
@@ -953,6 +1025,8 @@ const destroyGraph = () => {
     }
     currentPopper = null
   }
+  hideClusterTooltip()
+  expandCollapseApi = null
   if (cy) {
     cy.destroy()
     cy = null
@@ -1083,6 +1157,23 @@ onBeforeUnmount(() => {
   border-bottom: 8px solid white;
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
+}
+
+.cluster-tooltip {
+  display: none;
+  gap: 6px;
+  padding: 6px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dee2e6;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cluster-tooltip :deep(.p-button) {
+  white-space: nowrap;
 }
 
 .tooltip-ecli {
