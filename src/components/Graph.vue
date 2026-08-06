@@ -171,17 +171,17 @@ const getIterationsForNodeCount = (nodeCount: number): number => {
   return 1000
 }
 
-// A layout can only ever look clean if the number of things it has to place is small - no
-// amount of force-directed tuning fixes visual clutter once you're placing thousands of nodes
-// in one viewport. So past a certain size, clusters (grouped by statistics.community) start
-// collapsed into a single placeholder node, expandable on click. Which clusters start
-// collapsed depends on both the overall graph size (small graphs stay fully expanded) and each
-// cluster's own member count (bigger clusters collapse first).
+// Collapsing exists purely to alleviate rendering/layout overhead on big graphs - it's not a
+// UX default worth paying for on its own, so whenever the graph is small enough to render
+// cheaply in full, leave every cluster expanded. Mirrors the same size tiers as
+// getIterationsForNodeCount above, since that's the actual boundary where layout starts
+// costing more: below it there's no overhead reason to collapse anything. Above it, only
+// clusters large enough to meaningfully cut the visible node count are worth collapsing -
+// small clusters were never the problem, so they stay expanded even in a big graph.
 const getClusterCollapseThreshold = (totalNodeCount: number): number => {
-  if (totalNodeCount <= 100) return Infinity
-  if (totalNodeCount <= 500) return 15
-  if (totalNodeCount <= 2000) return 8
-  return 4
+  if (totalNodeCount < 1000) return Infinity
+  if (totalNodeCount < 3000) return 30
+  return 12
 }
 
 const calculateClusterSize = (memberCount: number): number => {
