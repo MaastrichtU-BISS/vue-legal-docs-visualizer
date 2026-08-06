@@ -12,7 +12,7 @@
         <InputIcon>
           <i class="pi pi-search" />
         </InputIcon>
-        <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" />
+        <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" :style="'padding-right: 0;'" />
       </IconField>
     </div>
     <div class="cy-controls">
