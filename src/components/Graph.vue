@@ -145,6 +145,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   docClick: [doc: any]
+  clusterClick: [payload: { clusterId: string; documents: any[] }]
 }>()
 
 const isLoading = ref(false)
@@ -723,9 +724,25 @@ const initGraph = async () => {
     cueUtilities?.eSelect?.()
   })
 
-  // Handle node clicks based on mode - cluster nodes behave exactly like any other node
-  // here (same highlight + docClick emit); expand/collapse is handled entirely by the cue
-  // (see above), not by clicking the node's body.
+  // The cue overlay canvas is pointer-events:none (see the stylesheet), so a click on the
+  // cue icon itself passes through to the node underneath and reaches this same 'tap'
+  // handler - replicate the library's own cue hit-test (using the bounds it stores on the
+  // node when it last drew the cue) so we can tell "clicked the cue" apart from "clicked
+  // the cluster body" and only open the preview modal for the latter.
+  const isCueClick = (node: any, event: any): boolean => {
+    const cueSize = node.data('expandcollapseRenderedCueSize')
+    const startX = node.data('expandcollapseRenderedStartX')
+    const startY = node.data('expandcollapseRenderedStartY')
+    if (!cueSize || startX == null || startY == null) return false
+    const pos = event.renderedPosition || event.cyRenderedPosition
+    if (!pos) return false
+    return pos.x >= startX && pos.x <= startX + cueSize && pos.y >= startY && pos.y <= startY + cueSize
+  }
+
+  // Handle node clicks based on mode. Clicking a cluster's body (not its +/- cue) opens the
+  // cluster preview modal instead of the normal doc-click behavior, since a cluster id isn't
+  // a real document - there's nothing for DocumentInfo to show for it. docsByCluster is the
+  // same grouping already computed above for the compound nodes themselves.
   cy.on('tap', 'node', (event) => {
     const node = event.target
     const nodeId = node.data('id')
@@ -733,7 +750,14 @@ const initGraph = async () => {
     if (!selectionMode.value) {
       cy?.$('.currentShown').removeClass('currentShown')
       node.addClass('currentShown')
-      emit('docClick', nodeId)
+
+      if (node.data('isClusterParent')) {
+        if (!isCueClick(node, event)) {
+          emit('clusterClick', { clusterId: nodeId, documents: docsByCluster.get(nodeId) || [] })
+        }
+      } else {
+        emit('docClick', nodeId)
+      }
 
       // The cue only draws itself on the currently *selected* node - select on click, the
       // same way the library's own demo works, rather than trying to fake it on hover.

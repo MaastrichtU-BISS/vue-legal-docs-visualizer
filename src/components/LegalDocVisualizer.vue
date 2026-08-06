@@ -25,6 +25,7 @@
                     :docs="docs"
                     :edges="edges"
                     @doc-click="handleDocClick"
+                    @cluster-click="handleClusterClick"
                     class="visualization-container"
                 />
             </KeepAlive>
@@ -32,6 +33,8 @@
 
         <DocumentInfo :document="selectedDocument" :docs="docs" :edges="edges" v-model:visible="drawerVisible"
             @citation-click="handleCitationClick" />
+
+        <ClusterPreview :documents="selectedClusterDocuments" :edges="edges" v-model:visible="clusterModalVisible" />
     </div>
 </template>
 
@@ -41,6 +44,7 @@ import type { LegalDocument, LegalEdge } from './types'
 import Button from 'primevue/button'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
+import ClusterPreview from './ClusterPreview.vue'
 import { VisualizationMode } from './types'
 import Graph from './Graph.vue'
 import 'primeicons/primeicons.css'
@@ -54,6 +58,8 @@ const props = defineProps<Props>();
 
 const selectedDocument = ref<LegalDocument | null>(null)
 const drawerVisible = ref(false)
+const selectedClusterDocuments = ref<LegalDocument[]>([])
+const clusterModalVisible = ref(false)
 const currentMode = ref(VisualizationMode.TABLE)
 const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | null>(null)
 
@@ -77,6 +83,16 @@ const handleDocClick = async (id: string) => {
     selectedDocument.value = doc
     await nextTick()
     drawerVisible.value = true
+}
+
+const handleClusterClick = async (payload: { clusterId: string; documents: LegalDocument[] }) => {
+    if (clusterModalVisible.value) {
+        clusterModalVisible.value = false
+        await nextTick()
+    }
+    selectedClusterDocuments.value = payload.documents
+    await nextTick()
+    clusterModalVisible.value = true
 }
 
 const handleCitationClick = async (id: string) => {
