@@ -1,12 +1,4 @@
 <template>
-  <div class="filter-bar">
-    <IconField>
-      <InputIcon>
-        <i class="pi pi-search" />
-      </InputIcon>
-      <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" />
-    </IconField>
-  </div>
   <div class="graph-container">
     <div v-if="isLoading" class="graph-loading">
       <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
@@ -14,6 +6,14 @@
       <p style="font-size: 0.85rem; color: #6c757d;">
         {{ layoutInfo.iterations < 100 ? 'Optimizing layout...' : layoutInfo.iterations < 500 ? 'Fast layout mode' : 'High quality layout' }}
       </p>
+    </div>
+    <div class="filter-bar">
+      <IconField>
+        <InputIcon>
+          <i class="pi pi-search" />
+        </InputIcon>
+        <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" />
+      </IconField>
     </div>
     <div class="cy-controls">
       <Button 
@@ -1152,16 +1152,21 @@ onBeforeUnmount(() => {
 }
 
 .filter-bar {
-  margin-bottom: 1rem;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
   display: flex;
-  gap: 12px;
   align-items: center;
-  flex-wrap: wrap;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dee2e6;
 }
 
 .filter-bar :deep(.p-iconfield) {
-  flex: 1;
-  min-width: 250px;
+  width: 220px;
 }
 
 .cy-container {
