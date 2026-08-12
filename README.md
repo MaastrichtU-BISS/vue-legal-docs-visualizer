@@ -21,10 +21,10 @@ yarn add vue-legal-docs-visualizer
 
 <script setup lang="ts">
 import { LegalDocVisualizer } from 'vue-legal-docs-visualizer'
-import type { LegalDocument } from 'legal-docs-client'
+import type { LegalDocument } from 'legal-docs-types'
 import 'vue-legal-docs-visualizer/style.css'
 
-// Fetch legal documents from legal-docs-client
+// Fetched by your server — see node-legal-docs-client
 const legalDocs: LegalDocument[] = [
   // Your legal documents here
 ]
@@ -56,7 +56,7 @@ Then use it anywhere in your app:
 
 ## Data Source
 
-This library expects data in the format provided by [`legal-docs-client`](https://www.npmjs.com/package/legal-docs-client), which provides structured legal document data with:
+This library expects data in the format described by [`legal-docs-types`](https://www.npmjs.com/package/legal-docs-types), which provides structured legal document data with:
 
 - Document metadata (ECLI, dates, instances, domains)
 - Citations and cross-references
@@ -87,7 +87,7 @@ This library expects data in the format provided by [`legal-docs-client`](https:
 
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
-| `docs` | `LegalDocument[]` | No | Array of legal documents from legal-docs-client |
+| `docs` | `LegalDocument[]` | No | Array of legal documents, shaped by `legal-docs-types` |
 
 ## Development
 
