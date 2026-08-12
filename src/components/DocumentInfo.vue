@@ -171,7 +171,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import type { RechtspraakDocumentData, EchrDocumentData } from 'legal-docs-client'
+import type { RechtspraakDocumentData, EchrDocumentData } from 'legal-docs-types'
 import { isEchrDocument, type LegalDocument, type LegalEdge } from './types'
 import Drawer from 'primevue/drawer'
 

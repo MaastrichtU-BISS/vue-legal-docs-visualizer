@@ -1,4 +1,4 @@
-import type { RechtspraakDocument, EchrDocument, RechtspraakEdge, EchrEdge } from 'legal-docs-client'
+import type { RechtspraakDocument, EchrDocument, RechtspraakEdge, EchrEdge } from 'legal-docs-types'
 
 export enum VisualizationMode {
     TABLE = 'table',
