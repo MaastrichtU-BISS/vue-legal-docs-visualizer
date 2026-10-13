@@ -22,6 +22,8 @@
                 <component
                     :is="currentMode === VisualizationMode.TABLE ? Table : Graph"
                     ref="currentComponentRef"
+                    :graph="documentSet"
+                    :config="activeConfig"
                     :docs="docs"
                     :edges="edges"
                     @doc-click="handleDocClick"
@@ -45,16 +47,39 @@ import Button from 'primevue/button'
 import Table from './Table.vue'
 import DocumentInfo from './DocumentInfo.vue'
 import ClusterPreview from './ClusterPreview.vue'
-import { VisualizationMode } from './types'
+import { VisualizationMode, isEchrDocument } from './types'
 import Graph from './Graph.vue'
 import 'primeicons/primeicons.css'
+import {
+  caseLawConfig,
+  echrConfig,
+  documentSetFromLegalDocs,
+  resolveVisualizerConfig,
+  type DocumentSetV1,
+  type VisualizerConfig,
+} from '../config'
 
 export interface Props {
     docs?: LegalDocument[]
     edges?: LegalEdge[]
+    /** Canonical input. When absent, `docs`/`edges` are adapted. */
+    graph?: DocumentSetV1
+    /** A preset id or a full config. Defaults to case-law/ECHR by dataset. */
+    config?: VisualizerConfig | string
 }
 
 const props = defineProps<Props>();
+
+const documentSet = computed<DocumentSetV1>(
+    () => props.graph ?? documentSetFromLegalDocs(props.docs ?? [], props.edges ?? []),
+)
+
+const activeConfig = computed<VisualizerConfig>(() => {
+    const resolved = resolveVisualizerConfig(props.config)
+    if (resolved) return resolved
+    const first = props.docs?.[0]
+    return first && isEchrDocument(first) ? echrConfig : caseLawConfig
+})
 
 const selectedDocument = ref<LegalDocument | null>(null)
 const drawerVisible = ref(false)
