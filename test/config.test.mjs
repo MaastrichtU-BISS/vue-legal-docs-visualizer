@@ -65,6 +65,21 @@ test('mergeVisualizerConfig overrides scalars, replaces columns, keeps the rest'
   assert.equal(merged.grouping.mode, 'community')
 })
 
+test('presets declare details, summary, date field and breakdowns', () => {
+  const casePublication = caseLawConfig.details.find((d) => d.type === 'link')
+  assert.equal(casePublication.field, 'url_publication')
+  assert.equal(caseLawConfig.summaryField, 'summary')
+  assert.equal(caseLawConfig.dateField, 'date_decision')
+  assert.ok(caseLawConfig.breakdowns.some((b) => b.field === 'legal_provisions' && b.multi))
+
+  assert.equal(echrConfig.summaryField, 'conclusion')
+  assert.equal(echrConfig.dateField, 'date_judgment')
+  assert.ok(echrConfig.breakdowns.some((b) => b.field === 'article_violated' && b.multi))
+
+  assert.equal(provisionsConfig.labels.idLabel, 'Provision ID')
+  assert.equal(provisionsConfig.breakdowns[0].field, 'instrument')
+})
+
 test('documentSetFromLegalDocs adapts docs and edges', () => {
   const set = documentSetFromLegalDocs(
     [{ id: 'ECLI:NL:1', data: { ecli: 'ECLI:NL:1', summary: 's' } }],

@@ -92,6 +92,23 @@ export interface TooltipConfig {
   lines?: TooltipLine[]
 }
 
+/** One field shown in the document details panel. */
+export interface DetailField {
+  label: string
+  field: string
+  type?: 'text' | 'list' | 'number' | 'link'
+  /** Derive the value (e.g. build a link URL). Falls back to `data[field]`. */
+  value?: (node: GraphNode) => unknown
+}
+
+/** One categorical breakdown shown for a cluster. */
+export interface BreakdownConfig {
+  title: string
+  field: string
+  /** The field holds a list of values. */
+  multi?: boolean
+}
+
 /** Terminology overrides so the same view reads right per workflow. */
 export interface VisualizerLabels {
   entity?: string
@@ -110,6 +127,14 @@ export interface VisualizerConfig {
   /** Column headers for analytics metrics. */
   metricHeaders?: Record<string, string>
   tooltip?: TooltipConfig
+  /** Fields shown in the document details panel. */
+  details?: DetailField[]
+  /** Field holding a summary paragraph, rendered as its own section. */
+  summaryField?: string
+  /** Field holding the primary date, for ranges and timelines. */
+  dateField?: string
+  /** Categorical breakdowns shown for a cluster. */
+  breakdowns?: BreakdownConfig[]
   labels?: VisualizerLabels
 }
 
@@ -238,6 +263,23 @@ export const caseLawConfig: VisualizerConfig = {
     subtitle: 'title',
     lines: [{ label: 'Summary', field: 'summary' }],
   },
+  details: [
+    { label: 'Date', field: 'date_decision' },
+    { label: 'Instance', field: 'instance' },
+    { label: 'Domains', field: 'domains', type: 'list' },
+    { label: 'Document Type', field: 'document_type' },
+    { label: 'Procedure Type', field: 'procedure_type' },
+    { label: 'Jurisdiction', field: 'jurisdiction_country' },
+    { label: 'Publication', field: 'url_publication', type: 'link' },
+  ],
+  summaryField: 'summary',
+  dateField: 'date_decision',
+  breakdowns: [
+    { title: 'By domain', field: 'domains', multi: true },
+    { title: 'By instance', field: 'instance' },
+    { title: 'By document type', field: 'document_type' },
+    { title: 'Most-cited provisions', field: 'legal_provisions', multi: true },
+  ],
   labels: { entity: 'Document', entityPlural: 'Documents', idLabel: 'ECLI' },
 }
 
@@ -287,6 +329,29 @@ export const echrConfig: VisualizerConfig = {
       value: (n) => n.data.importance,
     },
   ],
+  details: [
+    { label: 'Date', field: 'date_judgment' },
+    { label: 'Respondent State', field: 'respondent_state' },
+    { label: 'Keywords', field: 'keywords', type: 'list' },
+    { label: 'Document Type', field: 'document_type' },
+    { label: 'Importance', field: 'importance', type: 'number' },
+    {
+      label: 'Publication',
+      field: 'itemid',
+      type: 'link',
+      value: (n) => (n.data.itemid ? buildHudocUrl(String(n.data.itemid)) : undefined),
+    },
+  ],
+  summaryField: 'conclusion',
+  dateField: 'date_judgment',
+  breakdowns: [
+    { title: 'By respondent state', field: 'respondent_state' },
+    { title: 'By keyword', field: 'keywords', multi: true },
+    { title: 'By document type', field: 'document_type' },
+    { title: 'By importance', field: 'importance' },
+    { title: 'Articles violated', field: 'article_violated', multi: true },
+    { title: 'Articles applied', field: 'article_applied', multi: true },
+  ],
 }
 
 /** The generic provisions workflow. */
@@ -323,6 +388,12 @@ export const provisionsConfig: VisualizerConfig = {
   analytics: ['degree', 'inDegree', 'outDegree'],
   metricHeaders: { degree: 'Degree', inDegree: 'In Degree', outDegree: 'Out Degree' },
   tooltip: { title: 'title', subtitle: 'instrument' },
+  details: [
+    { label: 'Title', field: 'title' },
+    { label: 'Instrument', field: 'instrument' },
+  ],
+  summaryField: 'text',
+  breakdowns: [{ title: 'By instrument', field: 'instrument' }],
   labels: { entity: 'Provision', entityPlural: 'Provisions', idLabel: 'Provision ID' },
 }
 
@@ -360,6 +431,10 @@ export function mergeVisualizerConfig(
     analytics: override.analytics ?? base.analytics,
     metricHeaders: override.metricHeaders ?? base.metricHeaders,
     tooltip: override.tooltip ?? base.tooltip,
+    details: override.details ?? base.details,
+    summaryField: override.summaryField ?? base.summaryField,
+    dateField: override.dateField ?? base.dateField,
+    breakdowns: override.breakdowns ?? base.breakdowns,
     labels: { ...base.labels, ...override.labels },
   }
 }
