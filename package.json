@@ -22,6 +22,7 @@
     "build": "vite build && vue-tsc --project tsconfig.build.json",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
