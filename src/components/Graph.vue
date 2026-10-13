@@ -109,6 +109,14 @@ import InputSwitch from 'primevue/inputswitch'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import type { LegalEdge } from './types'
+import {
+  caseLawConfig,
+  documentSetFromLegalDocs,
+  resolveVisualizerConfig,
+  type DocumentSetV1,
+  type GraphNode,
+  type VisualizerConfig,
+} from '../config'
 
 // Dynamically import and register cytoscape-popper
 let popperRegistered = false
@@ -152,11 +160,34 @@ const registerExpandCollapse = async () => {
 }
 
 export interface Props {
+  /** Canonical input. When absent, `docs`/`edges` are adapted. */
+  graph?: DocumentSetV1
+  /** A preset id or a full config. Defaults to the case-law preset. */
+  config?: VisualizerConfig | string
+  /** Legacy case-law input, still supported. */
   docs?: any[]
   edges?: LegalEdge[]
 }
 
 const props = defineProps<Props>()
+
+const effectiveGraph = computed<DocumentSetV1>(
+  () => props.graph ?? documentSetFromLegalDocs((props.docs as any[]) ?? [], (props.edges as any[]) ?? []),
+)
+const effectiveConfig = computed<VisualizerConfig>(() => resolveVisualizerConfig(props.config) ?? caseLawConfig)
+const graphNodes = computed<GraphNode[]>(() => effectiveGraph.value.nodes)
+const graphEdges = computed(() => effectiveGraph.value.edges)
+
+/** Read a display field from a node, tolerating missing values. */
+function fieldValue(node: GraphNode, field?: string): string | undefined {
+  if (!field) return undefined
+  const value = node.data?.[field]
+  return value === undefined || value === null || value === '' ? undefined : String(value)
+}
+
+function nodeLabel(node: GraphNode): string {
+  return fieldValue(node, effectiveConfig.value.nodes.label) ?? node.id
+}
 
 const emit = defineEmits<{
   docClick: [doc: any]
@@ -167,7 +198,7 @@ const isLoading = ref(false)
 const selectedCount = ref(0)
 const selectionMode = ref(false)
 
-const totalCount = computed(() => props.docs?.length || 0)
+const totalCount = computed(() => graphNodes.value.length || 0)
 
 // Helper function to calculate iteration count based on node count. fcose's per-iteration
 // cost is much lower than core cose's O(n^2) (spectral layout + quadtree-approximated forces),
@@ -199,7 +230,7 @@ const calculateClusterSize = (memberCount: number): number => {
 }
 
 const layoutInfo = computed(() => {
-  const nodeCount = props.docs?.length || 0
+  const nodeCount = graphNodes.value.length || 0
   const iterations = getIterationsForNodeCount(nodeCount)
   return { nodeCount, iterations }
 })
@@ -230,9 +261,16 @@ const applyFilters = () => {
     const nodeId = node.data('id')
 
     // Check search query
-    const matchesSearch = !searchLower ||
-      nodeId.toLowerCase().includes(searchLower) ||
-      (docData?.data?.summary || docData?.data?.conclusion || '').toLowerCase().includes(searchLower)
+    const searchable = [
+      nodeId,
+      docData?.data?.summary,
+      docData?.data?.conclusion,
+      ...(effectiveConfig.value.tooltip?.lines ?? []).map((line) => docData?.data?.[line.field]),
+    ]
+      .filter((value) => value !== undefined && value !== null && value !== '')
+      .join(' ')
+      .toLowerCase()
+    const matchesSearch = !searchLower || searchable.includes(searchLower)
 
     // Apply visibility
     if (matchesSearch) {
@@ -477,24 +515,15 @@ const generateClusterColors = (parentIds: string[]): Map<string, string> => {
   return colorMap
 }
 
-// BlueLab link types -> edge colours (docs/MODULARIZATION_PLAN.md §6, "Graph
-// step"). Any other relation_type falls back to the neutral edge colour.
-const RELATION_COLORS: Record<string, string> = {
-  definition: '#2980b9',
-  carve_out: '#e67e22',
-  routing: '#8e44ad',
-  safe_harbour: '#16a085',
-  triggering: '#c0392b',
-  implementation: '#27ae60',
-  conflict: '#d35400',
-  cumulation: '#7f8c8d'
+// Edge colour per relation type, from the config's `edges.types`. Any type the
+// config does not style falls back to the neutral edge colour.
+const relationColor = (type?: string): string => {
+  const types = effectiveConfig.value.edges.types ?? {}
+  return (type && types[type]?.color) || '#95a5a6'
 }
 
-const relationColor = (type?: string): string =>
-  (type && RELATION_COLORS[type]) || '#95a5a6'
-
 const initGraph = async () => {
-  if (!cyContainer.value || !props.docs || props.docs.length === 0) {
+  if (!cyContainer.value || graphNodes.value.length === 0) {
     isLoading.value = false
     return
   }
@@ -506,26 +535,33 @@ const initGraph = async () => {
   await registerFcose()
   await registerExpandCollapse()
 
-  // Group docs by cluster (statistics.community - a real community-detection cluster id).
-  // statistics.parent looks like a similar grouping field but is actually a spanning-tree
-  // pointer to another *real document's own id* - reusing it as a compound node id collided
-  // with that document's actual node (edges attaching straight to "squares", cluster clicks
-  // shadowing real document clicks). Prefixing the community number rules out any collision.
+  // Group nodes into clusters according to the config. The declared field (or
+  // an explicit `data.parent`) wins; otherwise a `community` grouping reads the
+  // community-detection id. Prefixing rules out collisions with real node ids.
+  const grouping = effectiveConfig.value.grouping
   const getClusterKey = (doc: any): string | undefined => {
-    // An explicit host grouping key wins over the community-detection cluster:
-    // BlueLab sets data.parent (or data.instrument) to the instrument id so the
-    // graph compounds provisions per instrument. Prefixing rules out a
-    // collision with a real document id, same as the community case below.
-    const explicit = doc.data?.parent ?? doc.parent
+    if (grouping.mode === 'none') return undefined
+
+    const explicit = grouping.field ? doc.data?.[grouping.field] : doc.data?.parent
     if (explicit !== undefined && explicit !== null && explicit !== '') {
       return `cluster-${explicit}`
     }
-    const community = doc.data?.statistics?.community
-    return community === undefined || community === null ? undefined : `cluster-${community}`
+
+    if (grouping.fn) {
+      const key = grouping.fn(doc)
+      if (key !== undefined && key !== null && key !== '') return `cluster-${key}`
+    }
+
+    if (grouping.mode === 'community') {
+      const community = doc.data?.statistics?.community
+      return community === undefined || community === null ? undefined : `cluster-${community}`
+    }
+
+    return undefined
   }
 
   docsByCluster = new Map<string, any[]>()
-  props.docs.forEach(doc => {
+  graphNodes.value.forEach(doc => {
     const clusterKey = getClusterKey(doc)
     if (clusterKey) {
       if (!docsByCluster.has(clusterKey)) docsByCluster.set(clusterKey, [])
@@ -534,18 +570,18 @@ const initGraph = async () => {
   })
   const parentColorMap = generateClusterColors(Array.from(docsByCluster.keys()))
 
-  // A human label per cluster when the host names one (BlueLab's instrument
-  // title), falling back to the document count in the parent-node label below.
+  // A human label per cluster when the host names one, falling back to the
+  // document count in the parent-node label below.
   const clusterTitles = new Map<string, string>()
-  props.docs.forEach(doc => {
+  graphNodes.value.forEach(doc => {
     const clusterKey = getClusterKey(doc)
     if (!clusterKey) return
-    const title = doc.data?.instrument_title || doc.data?.parent || doc.parent
+    const title = doc.data?.instrument_title ?? doc.data?.parent
     if (title && !clusterTitles.has(clusterKey)) clusterTitles.set(clusterKey, String(title))
   })
 
   // Create a Set of valid node IDs for edge validation
-  const validNodeIds = new Set(props.docs.map(doc => doc.id))
+  const validNodeIds = new Set(graphNodes.value.map(doc => doc.id))
 
   // Color for isolated nodes (degree = 0)
   const isolatedNodeColor = '#95a5a6' // Gray color for isolated nodes
@@ -567,7 +603,7 @@ const initGraph = async () => {
 
   // Which clusters get wrapped in a compound node (size >= 2, not worth it for a singleton),
   // and which of those start collapsed depending on the overall graph size and their own size.
-  const totalDocCount = props.docs.length
+  const totalDocCount = graphNodes.value.length
   const collapseThreshold = getClusterCollapseThreshold(totalDocCount)
   const clusterIdsToCollapse = new Set<string>()
   let collapsedDocCount = 0
@@ -594,8 +630,8 @@ const initGraph = async () => {
     }))
 
   // Create nodes from docs with color and size based on parent or isolation
-  const nodes = props.docs.map(doc => {
-    const degree = doc.data?.statistics?.degree || 0
+  const nodes = graphNodes.value.map(doc => {
+    const degree = Number((doc.data as any)?.statistics?.degree) || 0
     const isIsolated = degree === 0
     const size = calculateNodeSize(degree)
     const clusterId = getClusterKey(doc)
@@ -611,7 +647,7 @@ const initGraph = async () => {
     return {
       data: {
         id: doc.id,
-        label: doc.id.split(':').pop() || doc.id, // Simplified label
+        label: nodeLabel(doc),
         fullData: doc,
         color: color, // Store color in node data
         size: size, // Store size in node data
@@ -649,8 +685,8 @@ const initGraph = async () => {
     }
   }
 
-  if (props.edges) {
-    props.edges.forEach(edge => {
+  if (graphEdges.value.length > 0) {
+    graphEdges.value.forEach(edge => {
       if (validNodeIds.has(edge.source) && validNodeIds.has(edge.target)) {
         const edgeId = `${edge.source}->${edge.target}`
         if (!addedEdges.has(edgeId)) {
@@ -674,7 +710,7 @@ const initGraph = async () => {
       }
     })
   } else {
-    props.docs.forEach(doc => {
+    graphNodes.value.forEach(doc => {
       const sourceId = doc.id
 
       // Add edges for documents this one cites
@@ -1041,12 +1077,12 @@ const initGraph = async () => {
       clearTimeout(tooltipTimeout)
     }
 
-    const isEchr = docData.data?.dataset === 'ECHR'
+    const cfg = effectiveConfig.value
     tooltipContent.value = {
       ecli: docData.id || '',
-      title: isEchr ? (docData.data?.title || '') : '',
-      summary: (isEchr ? docData.data?.conclusion : docData.data?.summary) || 'No summary available',
-      provisions: docData.data?.legal_provisions || []
+      title: fieldValue(docData, cfg.tooltip?.subtitle) ?? '',
+      summary: fieldValue(docData, cfg.tooltip?.lines?.[0]?.field) ?? 'No summary available',
+      provisions: Array.isArray(docData.data?.legal_provisions) ? docData.data.legal_provisions : []
     }
 
     // Show tooltip after a delay
@@ -1168,7 +1204,7 @@ onMounted(async () => {
   await initGraph()
 })
 
-watch(() => props.docs, async () => {
+watch(() => graphNodes.value, async () => {
   destroyGraph()
   await initGraph()
 }, { deep: true })
