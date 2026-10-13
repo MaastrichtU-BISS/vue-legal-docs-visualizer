@@ -35,32 +35,36 @@
                 :sortable="col.sortable"
                 :style="columnStyle(col)">
             <template #body="{ data }">
-                <!-- Link type -->
-                <Button v-if="col.type === 'link' && data[col.field]"
-                        @click="openFullText(data[col.field])"
-                        icon="pi pi-external-link"
-                        text
-                        rounded
-                        severity="secondary"
-                        size="small" />
+                <slot :name="`cell-${col.field}`" :column="col" :row="data" :value="data[col.field]">
+                    <slot name="cell" :column="col" :row="data" :value="data[col.field]">
+                        <!-- Link type -->
+                        <Button v-if="col.type === 'link' && data[col.field]"
+                                @click="openFullText(data[col.field])"
+                                icon="pi pi-external-link"
+                                text
+                                rounded
+                                severity="secondary"
+                                size="small" />
 
-                <!-- Button type -->
-                <Button v-else-if="col.type === 'button' && data[col.field]"
-                        @click="openFullText(data[col.field])"
-                        :label="col.buttonText"
-                        size="small" />
+                        <!-- Button type -->
+                        <Button v-else-if="col.type === 'button' && data[col.field]"
+                                @click="openFullText(data[col.field])"
+                                :label="col.buttonText"
+                                size="small" />
 
-                <!-- Ellipsis type -->
-                <div v-else-if="col.type === 'ellipsis' && data[col.field]"
-                     :title="display(col, data)"
-                     :style="{ maxWidth: col.maxWidth, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }">
-                    {{ display(col, data) }}
-                </div>
+                        <!-- Ellipsis type -->
+                        <div v-else-if="col.type === 'ellipsis' && data[col.field]"
+                             :title="display(col, data)"
+                             :style="{ maxWidth: col.maxWidth, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }">
+                            {{ display(col, data) }}
+                        </div>
 
-                <!-- Default type -->
-                <div v-else>
-                    {{ display(col, data) }}
-                </div>
+                        <!-- Default type -->
+                        <div v-else>
+                            {{ display(col, data) }}
+                        </div>
+                    </slot>
+                </slot>
             </template>
         </Column>
     </DataTable>

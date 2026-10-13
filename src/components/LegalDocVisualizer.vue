@@ -29,19 +29,31 @@
                     @doc-click="handleDocClick"
                     @cluster-click="handleClusterClick"
                     class="visualization-container"
-                />
+                >
+                    <template v-for="(_, name) in viewSlots" #[name]="slotProps">
+                        <slot :name="name" v-bind="slotProps || {}" />
+                    </template>
+                </component>
             </KeepAlive>
         </div>
 
         <DocumentInfo :node="selectedNode" :graph="documentSet" :config="activeConfig" v-model:visible="drawerVisible"
-            @citation-click="handleCitationClick" />
+            @citation-click="handleCitationClick">
+            <template v-for="(_, name) in documentSlots" #[name]="slotProps">
+                <slot :name="name" v-bind="slotProps || {}" />
+            </template>
+        </DocumentInfo>
 
-        <ClusterPreview :nodes="selectedClusterNodes" :graph="documentSet" :config="activeConfig" v-model:visible="clusterModalVisible" />
+        <ClusterPreview :nodes="selectedClusterNodes" :graph="documentSet" :config="activeConfig" v-model:visible="clusterModalVisible">
+            <template v-for="(_, name) in clusterSlots" #[name]="slotProps">
+                <slot :name="name" v-bind="slotProps || {}" />
+            </template>
+        </ClusterPreview>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue'
+import { ref, nextTick, computed, useSlots } from 'vue'
 import type { LegalDocument, LegalEdge } from './types'
 import Button from 'primevue/button'
 import Table from './Table.vue'
@@ -81,6 +93,24 @@ const activeConfig = computed<VisualizerConfig>(() => {
     const first = props.docs?.[0]
     return first && isEchrDocument(first) ? echrConfig : caseLawConfig
 })
+
+// Slot passthrough: hosts override cells (`cell-*`, `node-*`), the details
+// panel (`document-*`, `details-extra`) and the cluster preview
+// (`cluster-*`, default) without forking the components.
+const slots = useSlots()
+type SlotFn = (slotProps?: Record<string, unknown>) => unknown
+
+function pickSlots(predicate: (name: string) => boolean): Record<string, SlotFn> {
+    const out: Record<string, SlotFn> = {}
+    for (const [name, fn] of Object.entries(slots)) {
+        if (fn && predicate(name)) out[name] = fn as SlotFn
+    }
+    return out
+}
+
+const viewSlots = computed(() => pickSlots((name) => name.startsWith('cell') || name.startsWith('node')))
+const documentSlots = computed(() => pickSlots((name) => name.startsWith('document') || name === 'details-extra'))
+const clusterSlots = computed(() => pickSlots((name) => name.startsWith('cluster') || name === 'default'))
 
 const selectedNode = ref<GraphNode | null>(null)
 const drawerVisible = ref(false)

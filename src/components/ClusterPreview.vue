@@ -37,6 +37,9 @@
       <div class="preview-section" v-if="categoricalHistograms.length > 0">
         <HistogramBars v-for="h in categoricalHistograms" :key="h.title" :title="h.title" :items="h.items" />
       </div>
+
+      <!-- Host extra content -->
+      <slot :nodes="members" :config="activeConfig" />
     </div>
   </Dialog>
 </template>

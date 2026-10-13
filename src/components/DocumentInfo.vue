@@ -34,6 +34,9 @@
                 <p class="summary-text">{{ summary }}</p>
             </div>
 
+            <!-- Host extra content -->
+            <slot name="details-extra" :node="activeNode" :config="activeConfig" />
+
             <!-- Statistics -->
             <div class="info-section" v-if="statistics">
                 <h3 class="section-title">Statistics</h3>
