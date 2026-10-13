@@ -1,0 +1,394 @@
+// Visualizer configuration: the canonical `document-set@1` input, the
+// workflow-agnostic view config, and the built-in presets. Additive and
+// backward compatible — the case-law `docs`/`edges` props still work and are
+// adapted into this shape.
+//
+// The config type is owned by this package (not a shared retrieval package):
+// the view is the visualizer's concern.
+
+import type { LegalDocument, LegalEdge } from './components/types'
+
+/** One node of a `document-set@1`. */
+export interface GraphNode {
+  id: string
+  data: Record<string, unknown>
+}
+
+/** One edge of a `document-set@1`. */
+export interface GraphEdge {
+  id?: string
+  source: string
+  target: string
+  /** The link type, e.g. an annotation relation label. */
+  relation_type?: string
+}
+
+/** The canonical graph the visualizer renders. */
+export interface DocumentSetV1 {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+/** Where a node's display fields live in `node.data` (or the node itself). */
+export interface NodeFieldConfig {
+  /** Key holding the node id. Default "id". */
+  id?: string
+  /** Key for the primary label. */
+  label: string
+  /** Key for a secondary label. */
+  secondaryLabel?: string
+  /** Key for the node type / group. */
+  type?: string
+  /** Key for a numeric size metric. */
+  size?: string
+}
+
+export interface EdgeTypeStyle {
+  label?: string
+  color?: string
+  width?: number
+  direction?: 'forward' | 'backward' | 'bidirectional' | 'none'
+}
+
+export interface EdgeConfig {
+  /** Key holding the relation type. Default "relation_type". */
+  typeField?: string
+  /** Type used when an edge has none. */
+  defaultType?: string
+  /** Styling per relation type. */
+  types?: Record<string, EdgeTypeStyle>
+}
+
+export interface GroupingConfig {
+  mode: 'parent' | 'clusterBy' | 'community' | 'none'
+  /** Field to group by, when mode is "parent" or "clusterBy". */
+  field?: string
+  /** Custom grouping, when a field is not enough. */
+  fn?: (node: GraphNode) => string
+}
+
+export interface ColumnConfig {
+  field: string
+  header: string
+  type?: 'default' | 'number' | 'link' | 'button' | 'ellipsis'
+  sortable?: boolean
+  width?: string
+  maxWidth?: string
+  buttonText?: string
+  /** Derive the cell value from the node (and graph). Falls back to `data[field]`. */
+  value?: (node: GraphNode, graph: DocumentSetV1) => unknown
+  /** Format the derived value for display. */
+  formatter?: (value: unknown, node: GraphNode) => string
+}
+
+export interface TooltipLine {
+  label: string
+  field: string
+}
+
+export interface TooltipConfig {
+  title?: string
+  subtitle?: string
+  lines?: TooltipLine[]
+}
+
+/** Terminology overrides so the same view reads right per workflow. */
+export interface VisualizerLabels {
+  entity?: string
+  entityPlural?: string
+  idLabel?: string
+}
+
+export interface VisualizerConfig {
+  id: string
+  nodes: NodeFieldConfig
+  edges: EdgeConfig
+  grouping: GroupingConfig
+  columns: ColumnConfig[]
+  /** Graph metrics to compute and show as extra columns. Empty/absent = none. */
+  analytics?: string[]
+  /** Column headers for analytics metrics. */
+  metricHeaders?: Record<string, string>
+  tooltip?: TooltipConfig
+  labels?: VisualizerLabels
+}
+
+// --- value helpers used by the presets -------------------------------------
+
+const firstOf = (...values: unknown[]): unknown =>
+  values.find((value) => value !== undefined && value !== null && value !== '')
+
+const joinList = (value: unknown): unknown =>
+  Array.isArray(value) ? (value.length ? value.join(', ') : undefined) : value
+
+const inDegree = (node: GraphNode, graph: DocumentSetV1): number =>
+  graph.edges.filter((edge) => edge.target === node.id).length
+
+const buildHudocUrl = (itemid: string): string =>
+  `https://hudoc.echr.coe.int/eng#%7B%22itemid%22:%5B%22${encodeURIComponent(itemid)}%22%5D%7D`
+
+const CASE_LAW_ANALYTICS = [
+  'degree',
+  'inDegree',
+  'outDegree',
+  'degreeCentrality',
+  'betweennessCentrality',
+  'closenessCentrality',
+  'pageRank',
+  'community',
+]
+
+const CASE_LAW_METRIC_HEADERS: Record<string, string> = {
+  degree: 'Degree',
+  inDegree: 'In Degree',
+  outDegree: 'Out Degree',
+  degreeCentrality: 'Degree Centrality',
+  betweennessCentrality: 'Betweenness',
+  closenessCentrality: 'Closeness',
+  pageRank: 'PageRank',
+  community: 'Community',
+}
+
+const CASE_LAW_COLUMNS: ColumnConfig[] = [
+  {
+    field: 'fullTextUrl',
+    header: 'Full Text',
+    type: 'link',
+    width: '80px',
+    value: (n) => n.data.url_publication,
+  },
+  { field: 'ecli', header: 'ECLI', type: 'default', sortable: true, width: '200px', value: (n) => n.id },
+  {
+    field: 'date',
+    header: 'Date',
+    type: 'default',
+    sortable: true,
+    width: '120px',
+    value: (n) => firstOf(n.data.date_decision, n.data.date_judgment),
+  },
+  {
+    field: 'summary',
+    header: 'Summary',
+    type: 'ellipsis',
+    sortable: true,
+    maxWidth: '300px',
+    value: (n) => firstOf(n.data.summary, n.data.conclusion),
+  },
+  {
+    field: 'instance',
+    header: 'Instance',
+    type: 'default',
+    sortable: true,
+    width: '200px',
+    value: (n) => firstOf(n.data.instance, n.data.respondent_state),
+  },
+  {
+    field: 'domain',
+    header: 'Domain',
+    type: 'default',
+    width: '180px',
+    value: (n) => joinList(firstOf(n.data.domains, n.data.keywords)),
+  },
+  {
+    field: 'decisionSummary',
+    header: 'Decision Summary',
+    type: 'default',
+    sortable: true,
+    width: '150px',
+    value: (n) => n.data.document_type,
+  },
+  {
+    field: 'timesCited',
+    header: 'Times Cited',
+    type: 'number',
+    sortable: true,
+    width: '120px',
+    value: (n, g) => inDegree(n, g),
+  },
+  {
+    field: 'topic',
+    header: 'Topic',
+    type: 'default',
+    sortable: true,
+    width: '150px',
+    value: (n) => n.data.procedure_type,
+  },
+]
+
+const CITATION_EDGES: EdgeConfig = {
+  typeField: 'relation_type',
+  defaultType: 'cites',
+  types: {
+    cites: { label: 'cites', color: '#8aa6b8', direction: 'forward' },
+    cited_by: { label: 'cited by', color: '#c0a36e', direction: 'backward' },
+  },
+}
+
+/** The default case-law workflow (Rechtspraak). */
+export const caseLawConfig: VisualizerConfig = {
+  id: 'caseLaw',
+  nodes: { id: 'id', label: 'ecli', secondaryLabel: 'title', type: 'dataset', size: 'degree' },
+  edges: CITATION_EDGES,
+  grouping: { mode: 'community' },
+  columns: CASE_LAW_COLUMNS,
+  analytics: CASE_LAW_ANALYTICS,
+  metricHeaders: CASE_LAW_METRIC_HEADERS,
+  tooltip: {
+    title: 'ecli',
+    subtitle: 'title',
+    lines: [{ label: 'Summary', field: 'summary' }],
+  },
+  labels: { entity: 'Document', entityPlural: 'Documents', idLabel: 'ECLI' },
+}
+
+/** The ECHR workflow. */
+export const echrConfig: VisualizerConfig = {
+  ...caseLawConfig,
+  id: 'echr',
+  columns: [
+    {
+      field: 'fullTextUrl',
+      header: 'Full Text',
+      type: 'link',
+      width: '80px',
+      value: (n) => (n.data.itemid ? buildHudocUrl(String(n.data.itemid)) : undefined),
+    },
+    { field: 'ecli', header: 'ECLI', type: 'default', sortable: true, width: '200px', value: (n) => n.id },
+    {
+      field: 'date',
+      header: 'Date',
+      type: 'default',
+      sortable: true,
+      width: '120px',
+      value: (n) => firstOf(n.data.date_judgment, n.data.date_decision),
+    },
+    {
+      field: 'conclusion',
+      header: 'Conclusion',
+      type: 'ellipsis',
+      sortable: true,
+      maxWidth: '300px',
+      value: (n) => n.data.conclusion,
+    },
+    {
+      field: 'respondent_state',
+      header: 'Respondent State',
+      type: 'default',
+      sortable: true,
+      width: '200px',
+      value: (n) => n.data.respondent_state,
+    },
+    {
+      field: 'importance',
+      header: 'Importance',
+      type: 'number',
+      sortable: true,
+      width: '110px',
+      value: (n) => n.data.importance,
+    },
+  ],
+}
+
+/** The generic provisions workflow. */
+export const provisionsConfig: VisualizerConfig = {
+  id: 'provisions',
+  nodes: { id: 'id', label: 'title', type: 'instrument', size: 'degree' },
+  edges: {
+    typeField: 'relation_type',
+    defaultType: 'related',
+    types: {
+      'Is a': { label: 'Is a', color: '#7aa6c2', direction: 'forward' },
+      'Has a': { label: 'Has a', color: '#7ac29a', direction: 'forward' },
+      'Belongs to': { label: 'Belongs to', color: '#c2a17a', direction: 'forward' },
+      Implies: { label: 'Implies', color: '#b07ac2', direction: 'forward' },
+      'Depends on': { label: 'Depends on', color: '#c27a7a', direction: 'forward' },
+      'Related to': { label: 'Related to', color: '#9aa6b8', direction: 'bidirectional' },
+      'Is not': { label: 'Is not', color: '#b8b8b8', direction: 'none' },
+      'Part of': { label: 'Part of', color: '#7ac2c2', direction: 'forward' },
+    },
+  },
+  grouping: { mode: 'parent', field: 'instrument' },
+  columns: [
+    { field: 'id', header: 'Provision ID', type: 'default', sortable: true, width: '200px', value: (n) => n.id },
+    { field: 'title', header: 'Title', type: 'default', sortable: true, width: '280px', value: (n) => n.data.title },
+    {
+      field: 'instrument',
+      header: 'Instrument',
+      type: 'default',
+      sortable: true,
+      width: '180px',
+      value: (n) => n.data.instrument,
+    },
+  ],
+  analytics: ['degree', 'inDegree', 'outDegree'],
+  metricHeaders: { degree: 'Degree', inDegree: 'In Degree', outDegree: 'Out Degree' },
+  tooltip: { title: 'title', subtitle: 'instrument' },
+  labels: { entity: 'Provision', entityPlural: 'Provisions', idLabel: 'Provision ID' },
+}
+
+/** The presets this package ships, by id. */
+export const visualizerPresets: Record<string, VisualizerConfig> = {
+  caseLaw: caseLawConfig,
+  echr: echrConfig,
+  provisions: provisionsConfig,
+}
+
+/** Resolve a preset id or a full config into a config. */
+export function resolveVisualizerConfig(
+  configOrId: VisualizerConfig | string | undefined,
+): VisualizerConfig | undefined {
+  if (configOrId === undefined) return undefined
+  if (typeof configOrId === 'string') return visualizerPresets[configOrId]
+  return configOrId
+}
+
+/** Merge a preset with host overrides: scalars win, columns/analytics replace. */
+export function mergeVisualizerConfig(
+  base: VisualizerConfig,
+  override: Partial<VisualizerConfig> = {},
+): VisualizerConfig {
+  return {
+    id: override.id ?? base.id,
+    nodes: { ...base.nodes, ...override.nodes },
+    edges: {
+      ...base.edges,
+      ...override.edges,
+      types: override.edges?.types ?? base.edges.types,
+    },
+    grouping: { ...base.grouping, ...override.grouping },
+    columns: override.columns ?? base.columns,
+    analytics: override.analytics ?? base.analytics,
+    metricHeaders: override.metricHeaders ?? base.metricHeaders,
+    tooltip: override.tooltip ?? base.tooltip,
+    labels: { ...base.labels, ...override.labels },
+  }
+}
+
+/**
+ * Adapt the case-law `docs`/`edges` props into `document-set@1`, so existing
+ * consumers keep working while the canonical input is introduced.
+ */
+export function documentSetFromLegalDocs(
+  docs: LegalDocument[] = [],
+  edges: LegalEdge[] = [],
+): DocumentSetV1 {
+  return {
+    nodes: docs.map((doc) => ({
+      id: String(doc.id),
+      data: {
+        ...(doc.data ?? {}),
+        // Keep the top-level grouping key reachable from node.data.
+        ...(doc.parent !== undefined ? { parent: doc.parent } : {}),
+      } as Record<string, unknown>,
+    })),
+    edges: edges.map((edge, index) => {
+      const record = edge as unknown as Record<string, unknown>
+      return {
+        id: (record.id as string | undefined) ?? `e${index}`,
+        source: String(record.source),
+        target: String(record.target),
+        relation_type: record.relation_type as string | undefined,
+      }
+    }),
+  }
+}

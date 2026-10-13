@@ -9,6 +9,10 @@ import './styles/main.css'
 export { LegalDocVisualizer, Graph }
 export type { LegalDocument, LegalEdge } from './components/types'
 
+// Canonical document-set@1 input, the workflow-agnostic view config, presets
+// and the case-law adapter. Additive — the docs/edges props still work.
+export * from './config'
+
 export interface LegalDocsVisualizerPlugin {
   install: (app: App) => void
 }
