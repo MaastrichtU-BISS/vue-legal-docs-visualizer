@@ -33,10 +33,10 @@
             </KeepAlive>
         </div>
 
-        <DocumentInfo :document="selectedDocument" :docs="docs" :edges="edges" v-model:visible="drawerVisible"
+        <DocumentInfo :node="selectedNode" :graph="documentSet" :config="activeConfig" v-model:visible="drawerVisible"
             @citation-click="handleCitationClick" />
 
-        <ClusterPreview :documents="selectedClusterDocuments" :edges="edges" v-model:visible="clusterModalVisible" />
+        <ClusterPreview :nodes="selectedClusterNodes" :graph="documentSet" :config="activeConfig" v-model:visible="clusterModalVisible" />
     </div>
 </template>
 
@@ -56,6 +56,7 @@ import {
   documentSetFromLegalDocs,
   resolveVisualizerConfig,
   type DocumentSetV1,
+  type GraphNode,
   type VisualizerConfig,
 } from '../config'
 
@@ -81,43 +82,43 @@ const activeConfig = computed<VisualizerConfig>(() => {
     return first && isEchrDocument(first) ? echrConfig : caseLawConfig
 })
 
-const selectedDocument = ref<LegalDocument | null>(null)
+const selectedNode = ref<GraphNode | null>(null)
 const drawerVisible = ref(false)
-const selectedClusterDocuments = ref<LegalDocument[]>([])
+const selectedClusterNodes = ref<GraphNode[]>([])
 const clusterModalVisible = ref(false)
 const currentMode = ref(VisualizationMode.TABLE)
 const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | null>(null)
 
 const refGraphComponent = computed(() => {
-    return currentMode.value === VisualizationMode.GRAPH ? currentComponentRef.value as InstanceType<typeof Graph> : null
+  return currentMode.value === VisualizationMode.GRAPH ? currentComponentRef.value as InstanceType<typeof Graph> : null
 })
 
 const refTableComponent = computed(() => {
-    return currentMode.value === VisualizationMode.TABLE ? currentComponentRef.value as InstanceType<typeof Table> : null
+  return currentMode.value === VisualizationMode.TABLE ? currentComponentRef.value as InstanceType<typeof Table> : null
 })
 
 const handleDocClick = async (id: string) => {
-    const doc = props.docs?.find(d => d.id === id)
-    if (!doc) return
+  const node = documentSet.value.nodes.find((n) => n.id === id)
+  if (!node) return
 
-    // If drawer is already open, close it briefly to ensure proper update
-    if (drawerVisible.value) {
-        drawerVisible.value = false
-        await nextTick()
-    }
-    selectedDocument.value = doc
+  // If drawer is already open, close it briefly to ensure proper update
+  if (drawerVisible.value) {
+    drawerVisible.value = false
     await nextTick()
-    drawerVisible.value = true
+  }
+  selectedNode.value = node
+  await nextTick()
+  drawerVisible.value = true
 }
 
-const handleClusterClick = async (payload: { clusterId: string; documents: LegalDocument[] }) => {
-    if (clusterModalVisible.value) {
-        clusterModalVisible.value = false
-        await nextTick()
-    }
-    selectedClusterDocuments.value = payload.documents
+const handleClusterClick = async (payload: { clusterId: string; documents: GraphNode[] }) => {
+  if (clusterModalVisible.value) {
+    clusterModalVisible.value = false
     await nextTick()
-    clusterModalVisible.value = true
+  }
+  selectedClusterNodes.value = payload.documents
+  await nextTick()
+  clusterModalVisible.value = true
 }
 
 const handleCitationClick = async (id: string) => {

@@ -2,7 +2,7 @@
   <Dialog v-model:visible="isVisible" modal :style="{ width: '700px' }" class="cluster-preview-dialog">
     <template #header>
       <div class="dialog-header">
-        <h2>{{ memberCount }} documents in this cluster</h2>
+        <h2>{{ memberCount }} {{ entityPlural.toLowerCase() }} in this cluster</h2>
       </div>
     </template>
 
@@ -10,7 +10,7 @@
       <!-- Summary -->
       <div class="preview-section">
         <div class="summary-grid">
-          <div class="summary-stat">
+          <div class="summary-stat" v-if="dateField">
             <span class="summary-value">{{ dateRangeLabel }}</span>
             <span class="summary-label">Date range</span>
           </div>
@@ -33,44 +33,9 @@
         <HistogramBars title="By decade" :items="decadeHistogram" />
       </div>
 
-      <!-- Categorical breakdowns -->
+      <!-- Categorical breakdowns (from config) -->
       <div class="preview-section" v-if="categoricalHistograms.length > 0">
         <HistogramBars v-for="h in categoricalHistograms" :key="h.title" :title="h.title" :items="h.items" />
-      </div>
-
-      <!-- Top provisions / articles -->
-      <div class="preview-section" v-if="topProvisions.length > 0">
-        <h3 class="section-title">Most-cited provisions</h3>
-        <ol class="provision-rank-list">
-          <li v-for="item in topProvisions" :key="item.label">
-            <span class="provision-name">{{ item.label }}</span>
-            <span class="provision-count">{{ item.count }}</span>
-          </li>
-        </ol>
-      </div>
-
-      <div class="preview-section" v-if="topViolatedArticles.length > 0 || topAppliedArticles.length > 0">
-        <h3 class="section-title">Articles</h3>
-        <div class="article-columns">
-          <div v-if="topViolatedArticles.length > 0">
-            <h4 class="histogram-title">Violated</h4>
-            <ol class="provision-rank-list">
-              <li v-for="item in topViolatedArticles" :key="item.label">
-                <span class="provision-name">{{ item.label }}</span>
-                <span class="provision-count">{{ item.count }}</span>
-              </li>
-            </ol>
-          </div>
-          <div v-if="topAppliedArticles.length > 0">
-            <h4 class="histogram-title">Applied</h4>
-            <ol class="provision-rank-list">
-              <li v-for="item in topAppliedArticles" :key="item.label">
-                <span class="provision-name">{{ item.label }}</span>
-                <span class="provision-count">{{ item.count }}</span>
-              </li>
-            </ol>
-          </div>
-        </div>
       </div>
     </div>
   </Dialog>
@@ -79,10 +44,24 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import Dialog from 'primevue/dialog'
-import { isEchrDocument, type LegalDocument, type LegalEdge } from './types'
+import type { LegalDocument, LegalEdge } from './types'
 import HistogramBars, { type HistogramItem } from './HistogramBars.vue'
+import {
+  caseLawConfig,
+  resolveVisualizerConfig,
+  type DocumentSetV1,
+  type GraphNode,
+  type VisualizerConfig,
+} from '../config'
 
 export interface Props {
+  /** Cluster members (canonical). */
+  nodes?: GraphNode[]
+  /** A preset id or a full config. Defaults to the case-law preset. */
+  config?: VisualizerConfig | string
+  /** The full graph, for edge counts. */
+  graph?: DocumentSetV1
+  /** Legacy input, still supported. */
   documents?: LegalDocument[]
   edges?: LegalEdge[]
   visible?: boolean
@@ -94,6 +73,19 @@ const emit = defineEmits<{
   'update:visible': [value: boolean]
 }>()
 
+const activeConfig = computed<VisualizerConfig>(() => resolveVisualizerConfig(props.config) ?? caseLawConfig)
+const entityPlural = computed(() => activeConfig.value.labels?.entityPlural ?? 'Documents')
+const dateField = computed(() => activeConfig.value.dateField)
+
+const members = computed<GraphNode[]>(() => {
+  if (props.nodes) return props.nodes
+  return (props.documents ?? []).map((doc) => ({
+    id: String(doc.id),
+    data: (doc.data ?? {}) as unknown as Record<string, unknown>,
+  }))
+})
+const memberCount = computed(() => members.value.length)
+
 const isVisible = ref(props.visible || false)
 
 watch(() => props.visible, (newVal) => {
@@ -104,16 +96,16 @@ watch(isVisible, (newVal) => {
   emit('update:visible', newVal)
 })
 
-const documents = computed(() => props.documents || [])
-const memberCount = computed(() => documents.value.length)
-
 // Count occurrences of each value produced by `pick`, sorted by frequency, top N.
-const topCounts = (pick: (doc: LegalDocument) => (string | undefined | null)[] | string | undefined | null, limit = 8): HistogramItem[] => {
+const topCounts = (
+  pick: (node: GraphNode) => (string | undefined | null)[] | string | undefined | null,
+  limit = 8,
+): HistogramItem[] => {
   const counts = new Map<string, number>()
-  documents.value.forEach(doc => {
-    const raw = pick(doc)
+  members.value.forEach((node) => {
+    const raw = pick(node)
     const values = Array.isArray(raw) ? raw : raw ? [raw] : []
-    values.forEach(v => {
+    values.forEach((v) => {
       if (!v) return
       counts.set(v, (counts.get(v) || 0) + 1)
     })
@@ -124,20 +116,17 @@ const topCounts = (pick: (doc: LegalDocument) => (string | undefined | null)[] |
     .slice(0, limit)
 }
 
-// ECHR's primary date is date_judgment - date_decision there maps to a different, often
-// absent field, so checking date_decision first (as Rechtspraak does) would miss it.
-const getYear = (doc: LegalDocument): number | null => {
-  const data = doc.data as any
-  const dateStr = isEchrDocument(doc)
-    ? (data?.date_judgment || data?.date_decision)
-    : (data?.date_decision || data?.date_published)
+const getYear = (node: GraphNode): number | null => {
+  const field = dateField.value
+  if (!field) return null
+  const dateStr = node.data?.[field]
   if (!dateStr) return null
   const year = parseInt(String(dateStr).slice(0, 4), 10)
   return Number.isFinite(year) ? year : null
 }
 
 const dateRangeLabel = computed(() => {
-  const years = documents.value.map(getYear).filter((y): y is number => y !== null)
+  const years = members.value.map(getYear).filter((y): y is number => y !== null)
   if (years.length === 0) return 'Unknown'
   const min = Math.min(...years)
   const max = Math.max(...years)
@@ -146,8 +135,8 @@ const dateRangeLabel = computed(() => {
 
 const decadeHistogram = computed<HistogramItem[]>(() => {
   const counts = new Map<number, number>()
-  documents.value.forEach(doc => {
-    const year = getYear(doc)
+  members.value.forEach((node) => {
+    const year = getYear(node)
     if (year === null) return
     const decade = Math.floor(year / 10) * 10
     counts.set(decade, (counts.get(decade) || 0) + 1)
@@ -158,48 +147,30 @@ const decadeHistogram = computed<HistogramItem[]>(() => {
 })
 
 const categoricalHistograms = computed(() => {
-  if (documents.value.length === 0) return []
-  const echrCluster = isEchrDocument(documents.value[0])
-
-  if (echrCluster) {
-    return [
-      { title: 'Respondent state', items: topCounts(d => (d.data as any)?.respondent_state) },
-      { title: 'Document type', items: topCounts(d => (d.data as any)?.document_type) },
-      { title: 'Importance', items: topCounts(d => {
-        const importance = (d.data as any)?.importance
-        return importance !== undefined && importance !== null ? `${importance}` : undefined
-      }) }
-    ].filter(h => h.items.length > 0)
-  }
-
-  return [
-    { title: 'Domain', items: topCounts(d => (d.data as any)?.domains) },
-    { title: 'Instance', items: topCounts(d => (d.data as any)?.instance) },
-    { title: 'Document type', items: topCounts(d => (d.data as any)?.document_type) }
-  ].filter(h => h.items.length > 0)
+  return (activeConfig.value.breakdowns ?? [])
+    .map((breakdown) => ({
+      title: breakdown.title,
+      items: topCounts((node) => {
+        const value = node.data?.[breakdown.field]
+        if (breakdown.multi) return Array.isArray(value) ? (value as string[]) : undefined
+        return value === undefined || value === null ? undefined : String(value)
+      }),
+    }))
+    .filter((histogram) => histogram.items.length > 0)
 })
-
-const topProvisions = computed(() => topCounts(d => (d.data as any)?.legal_provisions, 10))
-
-const toArticleList = (value?: string | string[]): string[] =>
-  !value ? [] : Array.isArray(value) ? value : [value]
-
-const topViolatedArticles = computed(() => topCounts(d => toArticleList((d.data as any)?.article_violated), 5))
-const topAppliedArticles = computed(() => topCounts(d => toArticleList((d.data as any)?.article_applied), 5))
 
 // How self-contained this cluster is: citations where both ends are members here
-// ("internal") vs. citations reaching outside it ("external") - a direct signal for
-// whether expanding is likely to surface a tight, self-explanatory group of documents
-// or just a handful of nodes with most of their citations elsewhere.
-const memberIds = computed(() => new Set(documents.value.map(d => d.id)))
+// ("internal") vs. citations reaching outside it ("external").
+const memberIds = computed(() => new Set(members.value.map((node) => node.id)))
 
-const relevantEdges = computed(() => {
-  if (!props.edges) return []
-  return props.edges.filter(e => memberIds.value.has(e.source) || memberIds.value.has(e.target))
-})
+const allEdges = computed(() => props.graph?.edges ?? props.edges ?? [])
+
+const relevantEdges = computed(() =>
+  allEdges.value.filter((edge) => memberIds.value.has(edge.source) || memberIds.value.has(edge.target)),
+)
 
 const internalEdgeCount = computed(() =>
-  relevantEdges.value.filter(e => memberIds.value.has(e.source) && memberIds.value.has(e.target)).length
+  relevantEdges.value.filter((edge) => memberIds.value.has(edge.source) && memberIds.value.has(edge.target)).length,
 )
 
 const externalEdgeCount = computed(() => relevantEdges.value.length - internalEdgeCount.value)
@@ -282,44 +253,5 @@ const connectivityHint = computed(() => {
   font-size: 13px;
   color: #4b5563;
   margin: 8px 0 0 0;
-}
-
-.histogram-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-  margin: 0 0 8px 0;
-}
-
-.article-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.provision-rank-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
-}
-
-.provision-rank-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: #374151;
-  margin-bottom: 4px;
-  line-height: 1.5;
-}
-
-.provision-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.provision-count {
-  color: #6b7280;
-  flex-shrink: 0;
 }
 </style>

@@ -2,120 +2,45 @@
     <Drawer v-model:visible="isVisible" position="right" :modal="false" class="document-drawer" :style="{ width: '400px' }">
         <template #header>
             <div class="drawer-header">
-                <h2>Document Details</h2>
+                <h2>{{ entityLabel }} Details</h2>
             </div>
         </template>
 
-        <div v-if="document" class="document-content">
-            <!-- ECLI Section -->
+        <div v-if="activeNode" class="document-content">
+            <!-- Identifier -->
             <div class="info-section">
                 <h3 class="section-title">Identifier</h3>
                 <div class="info-field">
-                    <span class="field-label">ECLI:</span>
-                    <span class="field-value">{{ document.id }}</span>
+                    <span class="field-label">{{ idLabel }}:</span>
+                    <span class="field-value">{{ activeNode.id }}</span>
                 </div>
             </div>
 
-            <!-- Basic Information -->
-            <div class="info-section" v-if="document.data">
+            <!-- Configured details -->
+            <div class="info-section" v-if="visibleDetails.length > 0">
                 <h3 class="section-title">Basic Information</h3>
-                
-                <div class="info-field" v-if="displayDate">
-                    <span class="field-label">Date:</span>
-                    <span class="field-value">{{ displayDate }}</span>
+                <div class="info-field" v-for="detail in visibleDetails" :key="detail.label + detail.field">
+                    <span class="field-label">{{ detail.label }}:</span>
+                    <a v-if="detail.type === 'link'" :href="detailHref(detail)" target="_blank" class="publication-link">
+                        {{ detailDisplay(detail) }} <i class="pi pi-external-link"></i>
+                    </a>
+                    <span v-else class="field-value">{{ detailDisplay(detail) }}</span>
                 </div>
-
-                <template v-if="rsData">
-                    <div class="info-field" v-if="rsData.instance">
-                        <span class="field-label">Instance:</span>
-                        <span class="field-value">{{ rsData.instance }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.domains && rsData.domains.length > 0">
-                        <span class="field-label">Domains:</span>
-                        <span class="field-value">{{ rsData.domains.join(', ') }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.document_type">
-                        <span class="field-label">Document Type:</span>
-                        <span class="field-value">{{ rsData.document_type }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.procedure_type">
-                        <span class="field-label">Procedure Type:</span>
-                        <span class="field-value">{{ rsData.procedure_type }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.jurisdiction_country">
-                        <span class="field-label">Jurisdiction:</span>
-                        <span class="field-value">{{ rsData.jurisdiction_country }}</span>
-                    </div>
-                </template>
-
-                <template v-else-if="echrData">
-                    <div class="info-field" v-if="echrData.respondent_state">
-                        <span class="field-label">Respondent State:</span>
-                        <span class="field-value">{{ echrData.respondent_state }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="echrData.keywords && echrData.keywords.length > 0">
-                        <span class="field-label">Keywords:</span>
-                        <span class="field-value">{{ echrData.keywords.join(', ') }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="echrData.document_type">
-                        <span class="field-label">Document Type:</span>
-                        <span class="field-value">{{ echrData.document_type }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="echrData.importance !== undefined && echrData.importance !== null">
-                        <span class="field-label">Importance:</span>
-                        <span class="field-value">{{ echrData.importance }}/4</span>
-                    </div>
-                </template>
             </div>
 
             <!-- Summary -->
-            <div class="info-section" v-if="rsData?.summary">
+            <div class="info-section" v-if="summary">
                 <h3 class="section-title">Summary</h3>
-                <p class="summary-text">{{ rsData.summary }}</p>
-            </div>
-            <div class="info-section" v-else-if="echrData?.conclusion">
-                <h3 class="section-title">Conclusion</h3>
-                <p class="summary-text">{{ echrData.conclusion }}</p>
-            </div>
-
-            <!-- Legal Provisions -->
-            <div class="info-section" v-if="rsData?.legal_provisions && rsData.legal_provisions.length > 0">
-                <h3 class="section-title">Legal Provisions</h3>
-                <ul class="provision-list">
-                    <li v-for="(provision, index) in rsData.legal_provisions" :key="index">
-                        {{ provision }}
-                    </li>
-                </ul>
-            </div>
-
-            <!-- Articles (ECHR only) -->
-            <div class="info-section"
-                v-if="echrData && (toArticleList(echrData.article_violated).length > 0 || toArticleList(echrData.article_applied).length > 0)">
-                <h3 class="section-title">Articles</h3>
-                <div class="info-field" v-if="toArticleList(echrData.article_violated).length > 0">
-                    <span class="field-label">Violated:</span>
-                    <span class="field-value">{{ toArticleList(echrData.article_violated).join(', ') }}</span>
-                </div>
-                <div class="info-field" v-if="toArticleList(echrData.article_applied).length > 0">
-                    <span class="field-label">Applied:</span>
-                    <span class="field-value">{{ toArticleList(echrData.article_applied).join(', ') }}</span>
-                </div>
+                <p class="summary-text">{{ summary }}</p>
             </div>
 
             <!-- Statistics -->
-            <div class="info-section" v-if="document.data?.statistics">
+            <div class="info-section" v-if="statistics">
                 <h3 class="section-title">Statistics</h3>
                 <div class="stats-list">
-                    <div class="info-field" v-for="(value, key) in document.data.statistics" :key="key">
+                    <div class="info-field" v-for="(value, key) in statistics" :key="key">
                         <template v-if="key != 'parent'">
-                            <span class="field-label">{{ formatStatKey(key) }}:</span>
+                            <span class="field-label">{{ formatStatKey(String(key)) }}:</span>
                             <span class="field-value">{{ formatStatValue(value) }}</span>
                         </template>
                     </div>
@@ -127,7 +52,7 @@
                 <h3 class="section-title">Cites ({{ documentCites.length }})</h3>
                 <ul class="citation-list">
                     <li v-for="(cite, index) in documentCites" :key="index">
-                        <span v-if="isEcliInDocs(cite)" class="citation-link" @click="handleCitationClick(cite)">
+                        <span v-if="isNodeInGraph(cite)" class="citation-link" @click="handleCitationClick(cite)">
                             {{ cite }}
                         </span>
                         <span v-else class="citation-text">
@@ -142,7 +67,7 @@
                 <h3 class="section-title">Cited By ({{ documentCitedBy.length }})</h3>
                 <ul class="citation-list">
                     <li v-for="(cite, index) in documentCitedBy" :key="index">
-                        <span v-if="isEcliInDocs(cite)" class="citation-link" @click="handleCitationClick(cite)">
+                        <span v-if="isNodeInGraph(cite)" class="citation-link" @click="handleCitationClick(cite)">
                             {{ cite }}
                         </span>
                         <span v-else class="citation-text">
@@ -151,85 +76,111 @@
                     </li>
                 </ul>
             </div>
-
-            <!-- URL -->
-            <div class="info-section" v-if="rsData?.url_publication">
-                <h3 class="section-title">Publication</h3>
-                <a :href="rsData.url_publication" target="_blank" class="publication-link">
-                    View Full Text <i class="pi pi-external-link"></i>
-                </a>
-            </div>
-            <div class="info-section" v-else-if="echrData?.itemid">
-                <h3 class="section-title">Publication</h3>
-                <a :href="buildHudocUrl(echrData.itemid)" target="_blank" class="publication-link">
-                    View Full Text <i class="pi pi-external-link"></i>
-                </a>
-            </div>
         </div>
     </Drawer>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import type { RechtspraakDocumentData, EchrDocumentData } from 'legal-docs-types'
-import { isEchrDocument, type LegalDocument, type LegalEdge } from './types'
 import Drawer from 'primevue/drawer'
+import type { LegalDocument, LegalEdge } from './types'
+import {
+  caseLawConfig,
+  resolveVisualizerConfig,
+  type DetailField,
+  type DocumentSetV1,
+  type GraphNode,
+  type VisualizerConfig,
+} from '../config'
 
 export interface Props {
+    /** The selected node (canonical). */
+    node?: GraphNode | null
+    /** A preset id or a full config. Defaults to the case-law preset. */
+    config?: VisualizerConfig | string
+    /** The full graph, for citation lookup. */
+    graph?: DocumentSetV1
+    /** Legacy input, still supported. */
     document?: LegalDocument | null
-    visible?: boolean
     docs?: LegalDocument[]
     edges?: LegalEdge[]
+    visible?: boolean
 }
 
 const props = defineProps<Props>()
 
-const rsData = computed<RechtspraakDocumentData | null>(() =>
-    props.document && !isEchrDocument(props.document) ? props.document.data as RechtspraakDocumentData : null
-)
-
-const echrData = computed<EchrDocumentData | null>(() =>
-    props.document && isEchrDocument(props.document) ? props.document.data as EchrDocumentData : null
-)
-
-// ECHR's primary date is date_judgment - date_decision there maps to a different, often
-// absent field, so relying on date_decision alone (as Rechtspraak does) silently drops the
-// date for most real ECHR documents.
-const displayDate = computed<string | null>(() =>
-    echrData.value ? (echrData.value.date_judgment || echrData.value.date_decision || null) : (rsData.value?.date_decision || null)
-)
-
-// Prefer the authoritative edges array when provided (ECHR documents don't populate
-// cites/cited_by themselves), falling back to the document's own fields otherwise.
-const documentCites = computed<string[]>(() => {
-    if (!props.document) return []
-    if (props.edges) {
-        return props.edges.filter(e => e.source === props.document!.id).map(e => e.target)
+const activeNode = computed<GraphNode | null>(() => {
+    if (props.node) return props.node
+    if (props.document) {
+        return { id: String(props.document.id), data: (props.document.data ?? {}) as unknown as Record<string, unknown> }
     }
-    return (props.document.data as any)?.cites ?? []
+    return null
+})
+
+const activeConfig = computed<VisualizerConfig>(() => resolveVisualizerConfig(props.config) ?? caseLawConfig)
+const entityLabel = computed(() => activeConfig.value.labels?.entity ?? 'Document')
+const idLabel = computed(() => activeConfig.value.labels?.idLabel ?? 'ID')
+
+const data = computed<Record<string, unknown>>(() => activeNode.value?.data ?? {})
+const statistics = computed<Record<string, unknown> | undefined>(() => {
+    const value = data.value.statistics
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined
+})
+const summary = computed<string | undefined>(() => {
+    const field = activeConfig.value.summaryField
+    if (!field) return undefined
+    const value = data.value[field]
+    return value === undefined || value === null || value === '' ? undefined : String(value)
+})
+
+function detailValue(detail: DetailField): unknown {
+    if (!activeNode.value) return undefined
+    return detail.value ? detail.value(activeNode.value) : data.value[detail.field]
+}
+
+function hasDetail(detail: DetailField): boolean {
+    const value = detailValue(detail)
+    if (Array.isArray(value)) return value.length > 0
+    return value !== undefined && value !== null && value !== ''
+}
+
+const visibleDetails = computed(() => (activeConfig.value.details ?? []).filter(hasDetail))
+
+function detailDisplay(detail: DetailField): string {
+    const value = detailValue(detail)
+    if (Array.isArray(value)) return value.join(', ')
+    if (value === undefined || value === null || value === '') return ''
+    return String(value)
+}
+
+function detailHref(detail: DetailField): string | undefined {
+    const value = detailValue(detail)
+    return typeof value === 'string' && value ? value : undefined
+}
+
+// Citation lists prefer the authoritative graph/edges; otherwise fall back to
+// the node's own cites/cited_by (which ECHR nodes don't populate).
+const documentCites = computed<string[]>(() => {
+    const node = activeNode.value
+    if (!node) return []
+    if (props.graph) return props.graph.edges.filter((e) => e.source === node.id).map((e) => e.target)
+    if (props.edges) return props.edges.filter((e) => e.source === node.id).map((e) => e.target)
+    const cites = data.value.cites
+    return Array.isArray(cites) ? (cites as string[]) : []
 })
 
 const documentCitedBy = computed<string[]>(() => {
-    if (!props.document) return []
-    if (props.edges) {
-        return props.edges.filter(e => e.target === props.document!.id).map(e => e.source)
-    }
-    return (props.document.data as any)?.cited_by ?? []
+    const node = activeNode.value
+    if (!node) return []
+    if (props.graph) return props.graph.edges.filter((e) => e.target === node.id).map((e) => e.source)
+    if (props.edges) return props.edges.filter((e) => e.target === node.id).map((e) => e.source)
+    const citedBy = data.value.cited_by
+    return Array.isArray(citedBy) ? (citedBy as string[]) : []
 })
-
-const toArticleList = (value?: string | string[]): string[] => {
-    if (!value) return []
-    return Array.isArray(value) ? value : [value]
-}
-
-const buildHudocUrl = (itemid: string): string => {
-    const encodedItemid = encodeURIComponent(itemid)
-    return `https://hudoc.echr.coe.int/eng#%7B%22itemid%22:%5B%22${encodedItemid}%22%5D%7D`
-}
 
 const emit = defineEmits<{
     'update:visible': [value: boolean]
-    'citation-click': [ecli: string]
+    'citation-click': [id: string]
 }>()
 
 const isVisible = ref(props.visible || false)
@@ -242,13 +193,14 @@ watch(isVisible, (newVal) => {
     emit('update:visible', newVal)
 })
 
-const isEcliInDocs = (ecli: string): boolean => {
-    if (!props.docs || props.docs.length === 0) return false
-    return props.docs.some(doc => doc.id === ecli)
+const isNodeInGraph = (id: string): boolean => {
+    if (props.graph) return props.graph.nodes.some((n) => n.id === id)
+    if (props.docs && props.docs.length > 0) return props.docs.some((doc) => doc.id === id)
+    return false
 }
 
-const handleCitationClick = (ecli: string) => {
-    emit('citation-click', ecli)
+const handleCitationClick = (id: string) => {
+    emit('citation-click', id)
 }
 
 const formatStatKey = (key: string): string => {
@@ -341,21 +293,6 @@ const formatStatValue = (value: any): string => {
     line-height: 1.6;
     margin: 0;
     font-size: 14px;
-}
-
-.tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-
-.tag {
-    background-color: #e0e7ff;
-    color: #4f46e5;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
 }
 
 .provision-list,
