@@ -13,6 +13,9 @@ export type { LegalDocument, LegalEdge } from './components/types'
 // and the case-law adapter. Additive — the docs/edges props still work.
 export * from './config'
 
+// Annotation -> document-set@1 adapter (folds in the link-graph build step).
+export * from './linkGraph'
+
 export interface LegalDocsVisualizerPlugin {
   install: (app: App) => void
 }
