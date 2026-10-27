@@ -52,6 +52,16 @@
                                 :label="col.buttonText"
                                 size="small" />
 
+                        <!-- Highlighted type -->
+                        <div v-else-if="col.type === 'highlighted' && data[col.field]"
+                             :title="display(col, data)"
+                             :style="{ maxWidth: col.maxWidth, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }">
+                            <template v-for="(chunk, i) in highlightedChunks(data, col)" :key="i">
+                                <mark v-if="chunk.marked" class="ir-highlight">{{ chunk.text }}</mark>
+                                <template v-else>{{ chunk.text }}</template>
+                            </template>
+                        </div>
+
                         <!-- Ellipsis type -->
                         <div v-else-if="col.type === 'ellipsis' && data[col.field]"
                              :title="display(col, data)"
@@ -87,7 +97,7 @@ import {
   type DocumentSetV1,
   type VisualizerConfig,
 } from '../config'
-import { buildTableModel, formatCell, type TableColumn, type TableRow } from '../table'
+import { buildTableModel, formatCell, splitHighlights, type HighlightRange, type HighlightedChunk, type TableColumn, type TableRow } from '../table'
 
 export interface Props {
   /** Canonical input. When absent, `docs`/`edges` are adapted. */
@@ -136,6 +146,15 @@ function columnStyle(col: TableColumn) {
 
 function display(col: TableColumn, row: TableRow): string {
   return formatCell(row[col.field], col, row.__node)
+}
+
+/** Marked/plain chunks for a `highlighted` column, from the node's highlights. */
+function highlightedChunks(row: TableRow, col: TableColumn): HighlightedChunk[] {
+  const text = row[col.field]
+  if (typeof text !== 'string' || !text) return []
+  const raw = (row.__node?.data as Record<string, unknown> | undefined)?.highlights
+  const highlights = Array.isArray(raw) ? (raw as HighlightRange[]) : []
+  return splitHighlights(text, highlights)
 }
 
 const highlightRowById = (id: string) => {
@@ -219,6 +238,12 @@ defineExpose({
   width: 100%;
   display: flex;
   flex-direction: column;
+}
+
+:deep(.ir-highlight) {
+  background: #fff3c4;
+  border-radius: 3px;
+  padding: 0 1px;
 }
 
 .search-bar {

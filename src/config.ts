@@ -70,7 +70,7 @@ export interface GroupingConfig {
 export interface ColumnConfig {
   field: string
   header: string
-  type?: 'default' | 'number' | 'link' | 'button' | 'ellipsis'
+  type?: 'default' | 'number' | 'link' | 'button' | 'ellipsis' | 'highlighted'
   sortable?: boolean
   width?: string
   maxWidth?: string
@@ -420,7 +420,7 @@ export const irConfig: VisualizerConfig = {
     { field: 'rank', header: 'Rank', type: 'number', sortable: true, width: '70px', value: (n) => n.data.rank },
     { field: 'title', header: 'Title', type: 'default', sortable: true, width: '240px', value: (n) => n.data.title },
     { field: 'score', header: 'Score', type: 'number', sortable: true, width: '90px', value: (n) => n.data.score },
-    { field: 'snippet', header: 'Snippet', type: 'ellipsis', maxWidth: '400px', value: (n) => n.data.snippet },
+    { field: 'snippet', header: 'Snippet', type: 'highlighted', maxWidth: '400px', value: (n) => n.data.snippet },
   ],
   analytics: [],
   tooltip: { title: 'title', subtitle: 'score' },
@@ -446,6 +446,29 @@ export function resolveVisualizerConfig(
   if (configOrId === undefined) return undefined
   if (typeof configOrId === 'string') return visualizerPresets[configOrId]
   return configOrId
+}
+
+export interface FactoryOptions {
+  /** A preset id or a full config. */
+  config?: VisualizerConfig | string
+  /** Import-time view selection; overrides the config's `views` when given. */
+  views?: ('documents' | 'graph')[]
+}
+
+export interface ResolvedFactoryConfig {
+  config: VisualizerConfig
+}
+
+/**
+ * Resolve the factory's import-time options into a full config. Preset ids
+ * resolve through `visualizerPresets`; an explicit `views` option wins over
+ * the config's own `views`. Import-time config is authoritative for views
+ * once resolved — runtime cannot widen them.
+ */
+export function resolveFactoryConfig(options: FactoryOptions = {}): ResolvedFactoryConfig {
+  const resolved = resolveVisualizerConfig(options.config) ?? resolveVisualizerConfig('ir')!
+  if (options.views === undefined) return { config: resolved }
+  return { config: { ...resolved, views: options.views } }
 }
 
 /** Merge a preset with host overrides: scalars win, columns/analytics replace. */

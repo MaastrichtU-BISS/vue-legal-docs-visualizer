@@ -7,12 +7,54 @@ import type { DocumentSetV1, GraphNode, VisualizerConfig } from './config'
 export interface TableColumn {
   field: string
   header: string
-  type: 'default' | 'number' | 'link' | 'button' | 'ellipsis'
+  type: 'default' | 'number' | 'link' | 'button' | 'ellipsis' | 'highlighted'
   sortable: boolean
   width?: string
   maxWidth?: string
   buttonText?: string
   formatter?: (value: unknown, node: GraphNode) => string
+}
+
+/** A term occurrence inside the snippet text, as `IRResult.highlights` carries it. */
+export interface HighlightRange {
+  start: number
+  end: number
+}
+
+export interface HighlightedChunk {
+  text: string
+  marked: boolean
+}
+
+/**
+ * Split snippet text into plain and highlighted chunks, using the highlight
+ * offsets the retrieval backend reported. Overlapping ranges merge; ranges
+ * outside the text are clamped. Pure so the Table can render `<mark>` spans
+ * from it and tests can pin the behavior.
+ */
+export function splitHighlights(
+  text: string,
+  highlights: HighlightRange[] = [],
+): HighlightedChunk[] {
+  const length = text.length
+  if (length === 0) return []
+
+  const marked = new Array<boolean>(length).fill(false)
+  for (const range of highlights ?? []) {
+    const start = Math.max(0, Math.floor(range.start))
+    const end = Math.min(length, Math.floor(range.end))
+    for (let i = start; i < end; i++) marked[i] = true
+  }
+
+  const chunks: HighlightedChunk[] = []
+  for (let i = 0; i < length; ) {
+    const isMarked = marked[i]
+    let j = i + 1
+    while (j < length && marked[j] === isMarked) j++
+    chunks.push({ text: text.slice(i, j), marked: isMarked })
+    i = j
+  }
+  return chunks
 }
 
 export interface TableRow {
