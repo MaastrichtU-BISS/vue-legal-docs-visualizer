@@ -117,6 +117,7 @@ import {
   type GraphNode,
   type VisualizerConfig,
 } from '../config'
+import { resolveMetricField, nodeMetric, metricRange, metricToSize, metricToColor, passesMinRelevance } from '../relevance'
 
 // Dynamically import and register cytoscape-popper
 let popperRegistered = false
@@ -530,6 +531,16 @@ const initGraph = async () => {
 
   isLoading.value = true
 
+  // Relevance metric and threshold: nodes whose configured metric value sits
+  // below `config.minRelevance` drop out of the graph entirely (and so do
+  // edges pointing at them, via the valid-id check). When no metric field is
+  // configured, everything passes and sizing falls back to degree.
+  const metricField = resolveMetricField(effectiveConfig.value)
+  const range = metricRange(graphNodes.value, metricField)
+  const visibleNodes = graphNodes.value.filter((doc) =>
+    passesMinRelevance(doc, metricField, effectiveConfig.value.minRelevance),
+  )
+
   // Register extensions first
   await registerPopper()
   await registerFcose()
@@ -561,7 +572,7 @@ const initGraph = async () => {
   }
 
   docsByCluster = new Map<string, any[]>()
-  graphNodes.value.forEach(doc => {
+  visibleNodes.forEach(doc => {
     const clusterKey = getClusterKey(doc)
     if (clusterKey) {
       if (!docsByCluster.has(clusterKey)) docsByCluster.set(clusterKey, [])
@@ -573,7 +584,7 @@ const initGraph = async () => {
   // A human label per cluster when the host names one, falling back to the
   // document count in the parent-node label below.
   const clusterTitles = new Map<string, string>()
-  graphNodes.value.forEach(doc => {
+  visibleNodes.forEach(doc => {
     const clusterKey = getClusterKey(doc)
     if (!clusterKey) return
     const title = doc.data?.instrument_title ?? doc.data?.parent
@@ -581,7 +592,7 @@ const initGraph = async () => {
   })
 
   // Create a Set of valid node IDs for edge validation
-  const validNodeIds = new Set(graphNodes.value.map(doc => doc.id))
+  const validNodeIds = new Set(visibleNodes.map(doc => doc.id))
 
   // Color for isolated nodes (degree = 0)
   const isolatedNodeColor = '#95a5a6' // Gray color for isolated nodes
@@ -630,15 +641,21 @@ const initGraph = async () => {
     }))
 
   // Create nodes from docs with color and size based on parent or isolation
-  const nodes = graphNodes.value.map(doc => {
+  const nodes = visibleNodes.map(doc => {
     const degree = Number((doc.data as any)?.statistics?.degree) || 0
+    const relevance = nodeMetric(doc, metricField)
+    const useRelevance = relevance !== undefined && range !== undefined
     const isIsolated = degree === 0
-    const size = calculateNodeSize(degree)
+    const size = useRelevance
+      ? metricToSize(relevance as number, range as { min: number; max: number })
+      : calculateNodeSize(degree)
     const clusterId = getClusterKey(doc)
     const isGrouped = Boolean(clusterId && (docsByCluster.get(clusterId)?.length || 0) >= 2)
 
     let color: string
-    if (isIsolated) {
+    if (useRelevance) {
+      color = metricToColor(relevance as number, range as { min: number; max: number })
+    } else if (isIsolated) {
       color = isolatedNodeColor
     } else {
       color = (clusterId ? parentColorMap.get(clusterId) : undefined) || '#3498db' // Default color if no parent
