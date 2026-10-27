@@ -1,14 +1,14 @@
 import { defineComponent, h } from 'vue'
 import LegalDocVisualizer from './components/LegalDocVisualizer.vue'
-import type { VisualizerConfig } from './config'
+import { resolveFactoryConfig, type FactoryOptions } from './config'
 
-export interface CreateVisualizerOptions {
-  config?: VisualizerConfig | string
-  views?: ('documents' | 'graph')[]
-}
-
-export function createVisualizer(options: CreateVisualizerOptions = {}) {
-  const baseConfig = options.config
+/**
+ * Build a pre-configured visualizer component. The config (preset id or full
+ * config, including `views`) is import-time and authoritative; runtime props
+ * (`results`, `docs`, `edges`, `graph`) carry the data.
+ */
+export function createVisualizer(options: FactoryOptions = {}) {
+  const { config: baseConfig } = resolveFactoryConfig(options)
   return defineComponent({
     name: 'ConfiguredLegalDocVisualizer',
     inheritAttrs: false,

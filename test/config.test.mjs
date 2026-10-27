@@ -18,6 +18,7 @@ const url = 'data:text/javascript;base64,' + Buffer.from(compiled).toString('bas
 const mod = await import(url)
 
 const {
+  resolveFactoryConfig,
   caseLawConfig,
   echrConfig,
   provisionsConfig,
@@ -110,4 +111,32 @@ test('merge keeps views and IR fields', () => {
   assert.deepEqual(merged.views, ['graph'])
   assert.equal(merged.minRelevance, 0.5)
   assert.equal(merged.relevanceField, 'score')
+})
+
+test('factory resolution: empty options fall back to the ir preset', () => {
+  const { config } = resolveFactoryConfig()
+  assert.equal(config.id, 'ir')
+  assert.deepEqual(config.views, ['documents', 'graph'])
+})
+
+test('factory resolution: preset id resolves with its own views', () => {
+  const { config } = resolveFactoryConfig({ config: 'ir' })
+  assert.equal(config.id, 'ir')
+  assert.deepEqual(config.views, ['documents', 'graph'])
+})
+
+test('factory resolution: explicit views override the config views', () => {
+  const fromPreset = resolveFactoryConfig({ config: 'ir', views: ['graph'] })
+  assert.deepEqual(fromPreset.config.views, ['graph'])
+  const fromObject = resolveFactoryConfig({
+    config: { id: 'x', nodes: { label: 't' }, edges: {}, grouping: { mode: 'none' }, columns: [], views: ['documents'] },
+    views: ['documents', 'graph'],
+  })
+  assert.deepEqual(fromObject.config.views, ['documents', 'graph'])
+})
+
+test('factory resolution: full config passes through unchanged without views', () => {
+  const full = { id: 'x', nodes: { label: 't' }, edges: {}, grouping: { mode: 'none' }, columns: [], views: ['documents'] }
+  const { config } = resolveFactoryConfig({ config: full })
+  assert.equal(config, full)
 })

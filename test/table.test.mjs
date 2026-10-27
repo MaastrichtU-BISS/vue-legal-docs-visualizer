@@ -90,3 +90,22 @@ test('formatCell prefers a column formatter', () => {
   const col = { field: 'x', header: 'X', type: 'default', sortable: false, formatter: () => 'F' }
   assert.equal(table.formatCell('anything', col, {}), 'F')
 })
+
+test('splitHighlights marks the reported ranges', async () => {
+  const { splitHighlights } = table
+  const chunks = splitHighlights('de fetch blijft', [{ start: 3, end: 8 }])
+  assert.deepEqual(chunks, [
+    { text: 'de ', marked: false },
+    { text: 'fetch', marked: true },
+    { text: ' blijft', marked: false },
+  ])
+})
+
+test('splitHighlights clamps out-of-range and merges overlaps', () => {
+  const { splitHighlights } = table
+  assert.deepEqual(splitHighlights('abcd', [{ start: 1, end: 3 }, { start: 2, end: 9 }, { start: -5, end: 0 }]), [
+    { text: 'a', marked: false },
+    { text: 'bcd', marked: true },
+  ])
+  assert.deepEqual(splitHighlights('', [{ start: 0, end: 5 }]), [])
+})
