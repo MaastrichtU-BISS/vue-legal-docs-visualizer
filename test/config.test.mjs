@@ -28,7 +28,7 @@ const {
 } = mod
 
 test('presets are registered', () => {
-  assert.deepEqual(Object.keys(visualizerPresets).sort(), ['caseLaw', 'echr', 'provisions'])
+  assert.deepEqual(Object.keys(visualizerPresets).sort(), ['caseLaw', 'echr', 'ir', 'provisions'])
 })
 
 test('case-law and ECHR share the graph shape but differ in columns', () => {
@@ -89,4 +89,25 @@ test('documentSetFromLegalDocs adapts docs and edges', () => {
   assert.deepEqual(set.edges, [
     { id: 'e0', source: 'ECLI:NL:1', target: 'ECLI:NL:2', relation_type: 'cites' },
   ])
+})
+
+test('ir preset carries views and relevance config', () => {
+  const { irConfig, irResultsToDocumentSet } = mod
+  assert.deepEqual(irConfig.views, ['documents', 'graph'])
+  assert.equal(irConfig.relevanceField, 'score')
+  assert.equal(irConfig.snippetField, 'snippet')
+  const set = irResultsToDocumentSet([
+    { id: 'r1', score: 0.9, title: 'T', snippet: 'S', rank: 1, segments: [{ id: 's1', text: 'seg', score: 0.5 }] },
+  ])
+  assert.equal(set.nodes[0].id, 'r1')
+  assert.equal(set.nodes[0].data.score, 0.9)
+  assert.deepEqual(set.nodes[0].data.segments, [{ id: 's1', text: 'seg', score: 0.5 }])
+})
+
+test('merge keeps views and IR fields', () => {
+  const { irConfig, mergeVisualizerConfig } = mod
+  const merged = mergeVisualizerConfig(irConfig, { views: ['graph'], minRelevance: 0.5 })
+  assert.deepEqual(merged.views, ['graph'])
+  assert.equal(merged.minRelevance, 0.5)
+  assert.equal(merged.relevanceField, 'score')
 })

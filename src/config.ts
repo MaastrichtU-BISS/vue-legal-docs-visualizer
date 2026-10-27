@@ -122,6 +122,16 @@ export interface VisualizerConfig {
   edges: EdgeConfig
   grouping: GroupingConfig
   columns: ColumnConfig[]
+  /** Which views are available. Empty/absent => ['documents','graph']. */
+  views?: ('documents' | 'graph')[]
+  /** Field holding the relevance score for IR results. Default 'score'. */
+  relevanceField?: string
+  /** Field holding the snippet text for IR results. Default 'snippet'. */
+  snippetField?: string
+  /** Optional formatter for the score. */
+  scoreFormatter?: (value: unknown) => string
+  /** Minimum relevance to include a node in graph mode. */
+  minRelevance?: number
   /** Graph metrics to compute and show as extra columns. Empty/absent = none. */
   analytics?: string[]
   /** Column headers for analytics metrics. */
@@ -398,10 +408,35 @@ export const provisionsConfig: VisualizerConfig = {
 }
 
 /** The presets this package ships, by id. */
+export const irConfig: VisualizerConfig = {
+  id: 'ir',
+  nodes: { id: 'id', label: 'title', type: 'result', size: 'score' },
+  edges: { typeField: 'relation_type', defaultType: 'related', types: {} },
+  grouping: { mode: 'none' },
+  views: ['documents', 'graph'],
+  relevanceField: 'score',
+  snippetField: 'snippet',
+  columns: [
+    { field: 'rank', header: 'Rank', type: 'number', sortable: true, width: '70px', value: (n) => n.data.rank },
+    { field: 'title', header: 'Title', type: 'default', sortable: true, width: '240px', value: (n) => n.data.title },
+    { field: 'score', header: 'Score', type: 'number', sortable: true, width: '90px', value: (n) => n.data.score },
+    { field: 'snippet', header: 'Snippet', type: 'ellipsis', maxWidth: '400px', value: (n) => n.data.snippet },
+  ],
+  analytics: [],
+  tooltip: { title: 'title', subtitle: 'score' },
+  details: [
+    { label: 'Score', field: 'score', type: 'number' },
+    { label: 'Snippet', field: 'snippet' },
+  ],
+  summaryField: 'snippet',
+  labels: { entity: 'Result', entityPlural: 'Results', idLabel: 'ID' },
+}
+
 export const visualizerPresets: Record<string, VisualizerConfig> = {
   caseLaw: caseLawConfig,
   echr: echrConfig,
   provisions: provisionsConfig,
+  ir: irConfig,
 }
 
 /** Resolve a preset id or a full config into a config. */
@@ -428,6 +463,11 @@ export function mergeVisualizerConfig(
     },
     grouping: { ...base.grouping, ...override.grouping },
     columns: override.columns ?? base.columns,
+    views: override.views ?? base.views,
+    relevanceField: override.relevanceField ?? base.relevanceField,
+    snippetField: override.snippetField ?? base.snippetField,
+    scoreFormatter: override.scoreFormatter ?? base.scoreFormatter,
+    minRelevance: override.minRelevance ?? base.minRelevance,
     analytics: override.analytics ?? base.analytics,
     metricHeaders: override.metricHeaders ?? base.metricHeaders,
     tooltip: override.tooltip ?? base.tooltip,
@@ -467,3 +507,62 @@ export function documentSetFromLegalDocs(
     }),
   }
 }
+
+
+// --- IR types & adapter ------------------------------------------------------
+
+export interface IRSegment {
+  id: string
+  text: string
+  score?: number
+}
+
+export interface IRResult {
+  id: string
+  title?: string
+  score: number
+  snippet?: string
+  highlights?: { start: number; end: number }[]
+  rank?: number
+  segments?: IRSegment[]
+  metadata?: Record<string, unknown>
+}
+
+export function irResultsToDocumentSet(
+  results: IRResult[] = [],
+  relations: IRRelationInput[] = [],
+): DocumentSetV1 {
+  return {
+    nodes: results.map((r, i) => ({
+      id: String(r.id),
+      data: {
+        ...(r.metadata ?? {}),
+        title: r.title,
+        score: r.score,
+        snippet: r.snippet,
+        rank: r.rank ?? i + 1,
+        segments: r.segments ?? [],
+      },
+    })),
+    edges: irRelationsToEdges(relations),
+  }
+}
+
+/** A relation between retrieved documents, as a retrieval backend returns it. */
+export interface IRRelationInput {
+  source: string
+  target: string
+  relation_type?: string
+}
+
+/** Map retrieval-backend relations into canonical graph edges. */
+export function irRelationsToEdges(relations: IRRelationInput[] = []): GraphEdge[] {
+  return relations.map((relation, index) => ({
+    id: `rel${index}`,
+    source: String(relation.source),
+    target: String(relation.target),
+    relation_type: relation.relation_type,
+  }))
+}
+
+
