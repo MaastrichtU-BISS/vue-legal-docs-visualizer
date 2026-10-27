@@ -1,18 +1,13 @@
 <template>
     <div class="legal-doc-visualizer">
-        <div class="mode-switcher">
+        <div v-if="availableViews.length > 1" class="mode-switcher">
             <Button 
-                icon="pi pi-table"
-                label="Table"
-                :class="{ active: currentMode === VisualizationMode.TABLE }"
-                @click="currentMode = VisualizationMode.TABLE"
-                severity="secondary"
-            />
-            <Button 
-                icon="pi pi-share-alt"
-                label="Graph"
-                :class="{ active: currentMode === VisualizationMode.GRAPH }"
-                @click="currentMode = VisualizationMode.GRAPH"
+                v-for="view in availableViews"
+                :key="view"
+                :icon="view === 'documents' ? 'pi pi-table' : 'pi pi-share-alt'"
+                :label="view === 'documents' ? 'Documents' : 'Graph'"
+                :class="{ active: currentMode === viewMode(view) }"
+                @click="currentMode = viewMode(view)"
                 severity="secondary"
             />
         </div>
@@ -38,7 +33,7 @@
         </div>
 
         <DocumentInfo :node="selectedNode" :graph="documentSet" :config="activeConfig" v-model:visible="drawerVisible"
-            @citation-click="handleCitationClick">
+            @citation-click="handleCitationClick" @segment-select="handleSegmentSelect">
             <template v-for="(_, name) in documentSlots" #[name]="slotProps">
                 <slot :name="name" v-bind="slotProps || {}" />
             </template>
@@ -53,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, useSlots } from 'vue'
+import { ref, nextTick, computed, watch, useSlots } from 'vue'
 import type { LegalDocument, LegalEdge } from './types'
 import Button from 'primevue/button'
 import Table from './Table.vue'
@@ -94,6 +89,17 @@ const activeConfig = computed<VisualizerConfig>(() => {
     return first && isEchrDocument(first) ? echrConfig : caseLawConfig
 })
 
+// The views the host configured at import time. Empty/absent keeps the
+// historical behavior: both the documents (table) and graph views.
+const availableViews = computed<('documents' | 'graph')[]>(() => {
+    const views = activeConfig.value.views
+    return views && views.length > 0 ? views : ['documents', 'graph']
+})
+
+function viewMode(view: 'documents' | 'graph'): VisualizationMode {
+    return view === 'documents' ? VisualizationMode.TABLE : VisualizationMode.GRAPH
+}
+
 // Slot passthrough: hosts override cells (`cell-*`, `node-*`), the details
 // panel (`document-*`, `details-extra`) and the cluster preview
 // (`cluster-*`, default) without forking the components.
@@ -117,7 +123,22 @@ const drawerVisible = ref(false)
 const selectedClusterNodes = ref<GraphNode[]>([])
 const clusterModalVisible = ref(false)
 const currentMode = ref(VisualizationMode.TABLE)
+
+// A view can never be switched away from into a view the config excludes
+// (import-time config is authoritative): snap currentMode into the allowed set.
+watch(availableViews, (views) => {
+    const allowed = views.map(viewMode)
+    if (!allowed.includes(currentMode.value)) currentMode.value = allowed[0]
+}, { immediate: true, deep: false })
 const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | null>(null)
+
+const emit = defineEmits<{
+    'segment-select': [payload: { nodeId: string; segmentId: string }]
+}>()
+
+function handleSegmentSelect(payload: { nodeId: string; segmentId: string }) {
+    emit('segment-select', payload)
+}
 
 const refGraphComponent = computed(() => {
   return currentMode.value === VisualizationMode.GRAPH ? currentComponentRef.value as InstanceType<typeof Graph> : null

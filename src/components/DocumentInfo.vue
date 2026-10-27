@@ -34,6 +34,33 @@
                 <p class="summary-text">{{ summary }}</p>
             </div>
 
+            <!-- Segments (provisions), overridable via the `segments` slot -->
+            <slot
+                v-if="segments.length > 0"
+                name="segments"
+                :segments="segments"
+                :node="activeNode"
+                :selected="selectedSegmentIds"
+            >
+                <div class="info-section">
+                    <h3 class="section-title">Segments ({{ segments.length }})</h3>
+                    <ul class="segment-list">
+                        <li
+                            v-for="segment in segments"
+                            :key="segment.id"
+                            class="segment-item"
+                            :class="{ selected: selectedSegmentIds.has(segment.id) }"
+                            @click="toggleSegment(segment)"
+                        >
+                            <span class="segment-check" aria-hidden="true">
+                                <i :class="selectedSegmentIds.has(segment.id) ? 'pi pi-check-circle' : 'pi pi-circle'" />
+                            </span>
+                            <span class="segment-text">{{ segment.text }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </slot>
+
             <!-- Host extra content -->
             <slot name="details-extra" :node="activeNode" :config="activeConfig" />
 
@@ -93,6 +120,7 @@ import {
   type DetailField,
   type DocumentSetV1,
   type GraphNode,
+  type IRSegment,
   type VisualizerConfig,
 } from '../config'
 
@@ -135,6 +163,31 @@ const summary = computed<string | undefined>(() => {
     const value = data.value[field]
     return value === undefined || value === null || value === '' ? undefined : String(value)
 })
+
+// Segments (provisions), as the IR adapter places them in node.data. The host
+// selects segments for annotation; the panel keeps its own toggle state and
+// reports every change through `segment-select`.
+const segments = computed<IRSegment[]>(() => {
+    const value = data.value.segments
+    return Array.isArray(value) ? (value as IRSegment[]) : []
+})
+
+const selectedSegmentIds = ref<Set<string>>(new Set())
+
+watch(() => activeNode.value?.id, () => {
+    selectedSegmentIds.value = new Set()
+})
+
+function toggleSegment(segment: IRSegment) {
+    const next = new Set(selectedSegmentIds.value)
+    const selected = !next.has(segment.id)
+    if (selected) next.add(segment.id)
+    else next.delete(segment.id)
+    selectedSegmentIds.value = next
+    if (activeNode.value) {
+        emit('segment-select', { nodeId: activeNode.value.id, segmentId: segment.id, selected })
+    }
+}
 
 function detailValue(detail: DetailField): unknown {
     if (!activeNode.value) return undefined
@@ -184,6 +237,7 @@ const documentCitedBy = computed<string[]>(() => {
 const emit = defineEmits<{
     'update:visible': [value: boolean]
     'citation-click': [id: string]
+    'segment-select': [payload: { nodeId: string; segmentId: string; selected: boolean }]
 }>()
 
 const isVisible = ref(props.visible || false)
@@ -296,6 +350,53 @@ const formatStatValue = (value: any): string => {
     line-height: 1.6;
     margin: 0;
     font-size: 14px;
+}
+
+.segment-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.segment-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.5;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.segment-item:hover {
+    background-color: #f8f9fa;
+}
+
+.segment-item.selected {
+    background-color: #e8f1fb;
+    border-color: #3498db;
+}
+
+.segment-check {
+    color: #adb5bd;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.segment-item.selected .segment-check {
+    color: #3498db;
+}
+
+.segment-text {
+    color: #374151;
 }
 
 .provision-list,
