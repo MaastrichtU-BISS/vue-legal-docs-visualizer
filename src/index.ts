@@ -3,9 +3,10 @@ import PrimeVue from 'primevue/config'
 import Tooltip from 'primevue/tooltip'
 import Aura from '@primeuix/themes/aura'
 import Graph from './components/Graph.vue'
+import LegalDocVisualizer from './components/LegalDocVisualizer.vue'
 import './styles/main.css'
 
-export { Graph }
+export { Graph, LegalDocVisualizer }
 export type { LegalDocument, LegalEdge } from './components/types'
 
 // Canonical document-set@1 input, the workflow-agnostic view config, presets
