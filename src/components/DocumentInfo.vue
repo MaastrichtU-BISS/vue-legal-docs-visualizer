@@ -136,6 +136,15 @@ export interface Props {
     docs?: LegalDocument[]
     edges?: LegalEdge[]
     visible?: boolean
+    /**
+     * The host's selected segments, when it owns the selection.
+     *
+     * Without it the panel keeps its own toggle state, which is what a
+     * read-only viewer wants. With it the panel renders the host's set and
+     * still reports every toggle, so the host stays the single source of
+     * truth (the annotation step needs the whole set, not a delta).
+     */
+    selectedSegmentIds?: string[]
 }
 
 const props = defineProps<Props>()
@@ -166,16 +175,21 @@ const summary = computed<string | undefined>(() => {
 
 // Segments (provisions), as the IR adapter places them in node.data. The host
 // selects segments for annotation; the panel keeps its own toggle state and
-// reports every change through `segment-select`.
+// reports every change through `segment-select`. When the host passes
+// `selectedSegmentIds`, its set is what the panel renders.
 const segments = computed<IRSegment[]>(() => {
     const value = data.value.segments
     return Array.isArray(value) ? (value as IRSegment[]) : []
 })
 
-const selectedSegmentIds = ref<Set<string>>(new Set())
+const localSelectedSegmentIds = ref<Set<string>>(new Set())
+
+const selectedSegmentIds = computed<Set<string>>(() =>
+    props.selectedSegmentIds ? new Set(props.selectedSegmentIds) : localSelectedSegmentIds.value,
+)
 
 watch(() => activeNode.value?.id, () => {
-    selectedSegmentIds.value = new Set()
+    localSelectedSegmentIds.value = new Set()
 })
 
 function toggleSegment(segment: IRSegment) {
@@ -183,7 +197,7 @@ function toggleSegment(segment: IRSegment) {
     const selected = !next.has(segment.id)
     if (selected) next.add(segment.id)
     else next.delete(segment.id)
-    selectedSegmentIds.value = next
+    localSelectedSegmentIds.value = next
     if (activeNode.value) {
         emit('segment-select', { nodeId: activeNode.value.id, segmentId: segment.id, selected })
     }
