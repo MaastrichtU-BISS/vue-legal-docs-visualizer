@@ -33,6 +33,7 @@
         </div>
 
         <DocumentInfo :node="selectedNode" :graph="documentSet" :config="activeConfig" v-model:visible="drawerVisible"
+            :selected-segment-ids="selectedSegmentIds"
             @citation-click="handleCitationClick" @segment-select="handleSegmentSelect">
             <template v-for="(_, name) in documentSlots" #[name]="slotProps">
                 <slot :name="name" v-bind="slotProps || {}" />
@@ -74,6 +75,14 @@ export interface Props {
     graph?: DocumentSetV1
     /** A preset id or a full config. Defaults to case-law/ECHR by dataset. */
     config?: VisualizerConfig | string
+    /**
+     * The host's selected segments, when it owns the selection.
+     *
+     * The host keeps the set (the annotation step needs all of it, not the
+     * last toggle) and passes it back, so the panel renders exactly what the
+     * host has. Without it the panel keeps its own state.
+     */
+    selectedSegmentIds?: string[]
 }
 
 const props = defineProps<Props>();
@@ -133,10 +142,10 @@ watch(availableViews, (views) => {
 const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | null>(null)
 
 const emit = defineEmits<{
-    'segment-select': [payload: { nodeId: string; segmentId: string }]
+    'segment-select': [payload: { nodeId: string; segmentId: string; selected: boolean }]
 }>()
 
-function handleSegmentSelect(payload: { nodeId: string; segmentId: string }) {
+function handleSegmentSelect(payload: { nodeId: string; segmentId: string; selected: boolean }) {
     emit('segment-select', payload)
 }
 
