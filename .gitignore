@@ -6,3 +6,4 @@ coverage
 .vscode
 src/dev
 .env
+dist-demo
