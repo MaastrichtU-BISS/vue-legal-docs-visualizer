@@ -4,9 +4,10 @@ import Tooltip from 'primevue/tooltip'
 import Aura from '@primeuix/themes/aura'
 import Graph from './components/Graph.vue'
 import LegalDocVisualizer from './components/LegalDocVisualizer.vue'
+import ResultsView from './components/ResultsView.vue'
 import './styles/main.css'
 
-export { Graph, LegalDocVisualizer }
+export { Graph, LegalDocVisualizer, ResultsView }
 export type { LegalDocument, LegalEdge } from './components/types'
 
 // Canonical document-set@1 input, the workflow-agnostic view config, presets
@@ -14,6 +15,7 @@ export type { LegalDocument, LegalEdge } from './components/types'
 export * from './config'
 export * from './createVisualizer'
 export * from './relevance'
+export * from './ir-results'
 export * from './annotation'
 
 // Annotation -> document-set@1 adapter (folds in the link-graph build step).

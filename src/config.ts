@@ -124,6 +124,18 @@ export interface VisualizerConfig {
   columns: ColumnConfig[]
   /** Which views are available. Empty/absent => ['documents','graph']. */
   views?: ('documents' | 'graph')[]
+  /**
+   * How the documents view renders. 'table' (the default) is the generic
+   * DataTable; 'results' is the IR master-detail view: result cards with
+   * score bars beside an in-place provision viewer.
+   */
+  documentsView?: 'table' | 'results'
+  /**
+   * The score threshold the IR results view starts from: cards below it dim,
+   * provisions below it are not pre-ticked. The host's slider overrides it
+   * at runtime through the `threshold` prop.
+   */
+  threshold?: number
   /** Field holding the relevance score for IR results. Default 'score'. */
   relevanceField?: string
   /** Field holding the snippet text for IR results. Default 'snippet'. */
@@ -413,7 +425,9 @@ export const irConfig: VisualizerConfig = {
   nodes: { id: 'id', label: 'title', type: 'result', size: 'score' },
   edges: { typeField: 'relation_type', defaultType: 'related', types: {} },
   grouping: { mode: 'none' },
-  views: ['documents', 'graph'],
+  views: ['documents'],
+  documentsView: 'results',
+  threshold: 0.2,
   relevanceField: 'score',
   snippetField: 'snippet',
   columns: [
@@ -487,6 +501,8 @@ export function mergeVisualizerConfig(
     grouping: { ...base.grouping, ...override.grouping },
     columns: override.columns ?? base.columns,
     views: override.views ?? base.views,
+    documentsView: override.documentsView ?? base.documentsView,
+    threshold: override.threshold ?? base.threshold,
     relevanceField: override.relevanceField ?? base.relevanceField,
     snippetField: override.snippetField ?? base.snippetField,
     scoreFormatter: override.scoreFormatter ?? base.scoreFormatter,
@@ -551,6 +567,27 @@ export interface IRResult {
   metadata?: Record<string, unknown>
 }
 
+/**
+ * A result's full document, as the host's loader returns it for the results
+ * view's "Full document" tab. `sections` renders one block per provision;
+ * without them `text` is shown as one block.
+ */
+export interface IRDocumentDetail {
+  id: string
+  title?: string
+  text?: string
+  sections?: { heading?: string; text: string }[]
+}
+
+/**
+ * The host callback that loads a result's full document, when it has one.
+ * The package never calls an API: without the loader the results view simply
+ * does not offer the "Full document" tab.
+ */
+export type IRDocumentLoader = (
+  nodeId: string,
+) => Promise<IRDocumentDetail | undefined> | IRDocumentDetail | undefined
+
 export function irResultsToDocumentSet(
   results: IRResult[] = [],
   relations: IRRelationInput[] = [],
@@ -563,6 +600,7 @@ export function irResultsToDocumentSet(
         title: r.title,
         score: r.score,
         snippet: r.snippet,
+        highlights: r.highlights ?? [],
         rank: r.rank ?? i + 1,
         segments: r.segments ?? [],
       },

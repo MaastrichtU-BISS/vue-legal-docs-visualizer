@@ -94,7 +94,9 @@ test('documentSetFromLegalDocs adapts docs and edges', () => {
 
 test('ir preset carries views and relevance config', () => {
   const { irConfig, irResultsToDocumentSet } = mod
-  assert.deepEqual(irConfig.views, ['documents', 'graph'])
+  assert.deepEqual(irConfig.views, ['documents'])
+  assert.equal(irConfig.documentsView, 'results')
+  assert.equal(irConfig.threshold, 0.2)
   assert.equal(irConfig.relevanceField, 'score')
   assert.equal(irConfig.snippetField, 'snippet')
   const set = irResultsToDocumentSet([
@@ -110,19 +112,21 @@ test('merge keeps views and IR fields', () => {
   const merged = mergeVisualizerConfig(irConfig, { views: ['graph'], minRelevance: 0.5 })
   assert.deepEqual(merged.views, ['graph'])
   assert.equal(merged.minRelevance, 0.5)
+  assert.equal(merged.documentsView, 'results')
+  assert.equal(merged.threshold, 0.2)
   assert.equal(merged.relevanceField, 'score')
 })
 
 test('factory resolution: empty options fall back to the ir preset', () => {
   const { config } = resolveFactoryConfig()
   assert.equal(config.id, 'ir')
-  assert.deepEqual(config.views, ['documents', 'graph'])
+  assert.deepEqual(config.views, ['documents'])
 })
 
 test('factory resolution: preset id resolves with its own views', () => {
   const { config } = resolveFactoryConfig({ config: 'ir' })
   assert.equal(config.id, 'ir')
-  assert.deepEqual(config.views, ['documents', 'graph'])
+  assert.deepEqual(config.views, ['documents'])
 })
 
 test('factory resolution: explicit views override the config views', () => {

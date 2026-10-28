@@ -30,6 +30,25 @@
           {{ searching ? 'Searching…' : 'Search' }}
         </button>
       </form>
+
+      <div class="retrieval-controls">
+        <div class="method-picker" role="group" aria-label="Search method">
+          <button
+            v-for="option in DEMO_METHODS"
+            :key="option.id"
+            type="button"
+            :class="{ active: method === option.id }"
+            @click="setMethod(option.id)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <label class="threshold-control">
+          Threshold
+          <input type="range" min="0" max="100" :value="Math.round(threshold * 100)" @input="onThresholdInput" />
+          <span class="threshold-value">{{ threshold.toFixed(2) }}</span>
+        </label>
+      </div>
       <p v-if="error" class="error">{{ error }}</p>
 
       <section v-if="results.length > 0 && layout !== 'annotate'" class="selection">
@@ -61,6 +80,10 @@
         :is="visualizerFor(layout)"
         :graph="layout === 'annotated' ? annotatedGraph : graph"
         :results="layout === 'annotated' ? [] : results"
+        :threshold="threshold"
+        :query-terms="highlightTerms"
+        :load-document="loadDemoDocument"
+        :selected-segment-ids="layout === 'annotated' ? [] : [...selectedSegments]"
         class="visualizer"
         @segment-select="onSegmentSelect"
       />
@@ -114,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createVisualizer } from '../src/createVisualizer'
 import { irResultsToAnnotationDocuments, assignmentsToDocumentSet } from '../src/annotation'
 import {
@@ -130,10 +153,12 @@ import {
   irConfig,
   irResultsToDocumentSet,
   type DocumentSetV1,
+  type IRDocumentDetail,
   type IRResult,
   type VisualizerConfig,
 } from '../src/config'
-import { search, type DemoRelation } from './stubBackend'
+import { preselectedSegmentIds, queryTerms } from '../src/ir-results'
+import { search, corpus, DEMO_METHODS, type DemoRelation } from './stubBackend'
 
 type Layout = 'documents' | 'both' | 'graph' | 'annotate' | 'annotated'
 
@@ -187,6 +212,8 @@ function visualizerFor(layout: Layout) {
 }
 
 const query = ref('data retention')
+const method = ref('bm25')
+const threshold = ref(0.2)
 const layout = ref<Layout>('both')
 const searching = ref(false)
 const error = ref('')
@@ -199,14 +226,30 @@ const graph = computed<DocumentSetV1>(() =>
   irResultsToDocumentSet(results.value, relations.value),
 )
 
+// The terms the query contributes to snippet/provision highlighting.
+const highlightTerms = computed(() => queryTerms(query.value))
+
+// The full document behind a result, for the results view's document tab.
+// The demo synthesizes it from the same stub corpus a real host would load.
+async function loadDemoDocument(id: string): Promise<IRDocumentDetail | undefined> {
+  const doc = corpus.find((candidate) => candidate.id === id)
+  if (!doc) return undefined
+  return {
+    id: doc.id,
+    title: doc.title,
+    sections: doc.segments.map((segment) => ({ heading: segment.id, text: segment.text })),
+  }
+}
+
 async function runSearch() {
   searching.value = true
   error.value = ''
   try {
-    const response = await search({ query: query.value })
+    const response = await search({ query: query.value, method: method.value })
     results.value = response.results
     relations.value = response.relations
-    selectedSegments.value = new Set()
+    // The threshold's pre-tick, re-derived for the fresh results.
+    selectedSegments.value = new Set(preselectedSegmentIds(response.results, threshold.value))
     savedAssignments.value = []
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -214,6 +257,22 @@ async function runSearch() {
     searching.value = false
   }
 }
+
+function setMethod(id: string) {
+  if (id === method.value) return
+  method.value = id
+  void runSearch()
+}
+
+function onThresholdInput(event: Event) {
+  threshold.value = Number((event.target as HTMLInputElement).value) / 100
+}
+
+// A slider move re-derives the pre-tick: the selection becomes exactly the
+// provisions the threshold admits (a manual un-tick does not survive it).
+watch(threshold, () => {
+  selectedSegments.value = new Set(preselectedSegmentIds(results.value, threshold.value))
+})
 
 // --- selection: whole documents and/or individual segments --------------------
 // Selecting a whole document simply selects all of its segments: the hand-off
@@ -399,6 +458,43 @@ const annotatedGraphLog = computed(() => JSON.stringify(annotatedGraph.value, nu
 }
 .error {
   color: #b91c1c;
+}
+.retrieval-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.method-picker {
+  display: flex;
+  gap: 4px;
+}
+.method-picker button {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+.method-picker button.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+}
+.threshold-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+.threshold-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 32px;
 }
 .selection {
   margin: 8px 0 16px;

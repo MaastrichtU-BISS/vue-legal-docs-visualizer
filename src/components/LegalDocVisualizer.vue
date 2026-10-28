@@ -15,14 +15,19 @@
         <div class="content">
             <KeepAlive>
                 <component
-                    :is="currentMode === VisualizationMode.TABLE ? Table : Graph"
+                    :is="activeViewComponent"
                     ref="currentComponentRef"
                     :graph="documentSet"
                     :config="activeConfig"
                     :docs="docs"
                     :edges="edges"
+                    :threshold="isResultsView ? effectiveThreshold : undefined"
+                    :query-terms="isResultsView ? queryTerms : undefined"
+                    :load-document="isResultsView ? loadDocument : undefined"
+                    :selected-segment-ids="isResultsView ? selectedSegmentIds : undefined"
                     @doc-click="handleDocClick"
                     @cluster-click="handleClusterClick"
+                    @segment-select="handleSegmentSelect"
                     class="visualization-container"
                 >
                     <template v-for="(_, name) in viewSlots" #[name]="slotProps">
@@ -53,6 +58,7 @@ import { ref, nextTick, computed, watch, useSlots } from 'vue'
 import type { LegalDocument, LegalEdge } from './types'
 import Button from 'primevue/button'
 import Table from './Table.vue'
+import ResultsView from './ResultsView.vue'
 import DocumentInfo from './DocumentInfo.vue'
 import ClusterPreview from './ClusterPreview.vue'
 import { VisualizationMode, isEchrDocument } from './types'
@@ -65,6 +71,7 @@ import {
   resolveVisualizerConfig,
   type DocumentSetV1,
   type GraphNode,
+  type IRDocumentLoader,
   type VisualizerConfig,
 } from '../config'
 
@@ -83,6 +90,16 @@ export interface Props {
      * host has. Without it the panel keeps its own state.
      */
     selectedSegmentIds?: string[]
+    /**
+     * The score threshold the IR results view dims and pre-ticks by. The
+     * host's slider holds it (see `preselectedSegmentIds`); without it the
+     * config's own `threshold` stands.
+     */
+    threshold?: number
+    /** Query terms marked in the results view's snippets and provisions. */
+    queryTerms?: string[]
+    /** Loads a result's full document for the results view's document tab. */
+    loadDocument?: IRDocumentLoader
 }
 
 const props = defineProps<Props>();
@@ -108,6 +125,21 @@ const availableViews = computed<('documents' | 'graph')[]>(() => {
 function viewMode(view: 'documents' | 'graph'): VisualizationMode {
     return view === 'documents' ? VisualizationMode.TABLE : VisualizationMode.GRAPH
 }
+
+// The IR preset's documents view is the master-detail results view; every
+// other preset keeps the generic table.
+const isResultsView = computed<boolean>(
+    () => currentMode.value === VisualizationMode.TABLE && activeConfig.value.documentsView === 'results',
+)
+
+const activeViewComponent = computed<typeof Table | typeof ResultsView | typeof Graph>(() => {
+    if (currentMode.value === VisualizationMode.GRAPH) return Graph
+    return isResultsView.value ? ResultsView : Table
+})
+
+const effectiveThreshold = computed<number>(
+    () => props.threshold ?? activeConfig.value.threshold ?? 0,
+)
 
 // Slot passthrough: hosts override cells (`cell-*`, `node-*`), the details
 // panel (`document-*`, `details-extra`) and the cluster preview
@@ -139,7 +171,7 @@ watch(availableViews, (views) => {
     const allowed = views.map(viewMode)
     if (!allowed.includes(currentMode.value)) currentMode.value = allowed[0]
 }, { immediate: true, deep: false })
-const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | null>(null)
+const currentComponentRef = ref<InstanceType<typeof Graph> | InstanceType<typeof Table> | InstanceType<typeof ResultsView> | null>(null)
 
 const emit = defineEmits<{
     'segment-select': [payload: { nodeId: string; segmentId: string; selected: boolean }]
@@ -154,7 +186,9 @@ const refGraphComponent = computed(() => {
 })
 
 const refTableComponent = computed(() => {
-  return currentMode.value === VisualizationMode.TABLE ? currentComponentRef.value as InstanceType<typeof Table> : null
+  return currentMode.value === VisualizationMode.TABLE && !isResultsView.value
+    ? currentComponentRef.value as InstanceType<typeof Table>
+    : null
 })
 
 const handleDocClick = async (id: string) => {

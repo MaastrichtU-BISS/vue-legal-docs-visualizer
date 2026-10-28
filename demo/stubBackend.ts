@@ -121,50 +121,208 @@ const RELATIONS: DemoRelation[] = [
   { source: 'ECLI:NL:HR:2023:987', target: 'ECLI:NL:HR:2020:1176', relation_type: 'related to' },
 ]
 
-const TERM_CORPUS: Record<string, string[]> = {
-  verbrandingsoven: ['ECLI:NL:HR:2020:1176'],
-  overeenkomst: ['ECLI:NL:HR:2021:214'],
-  milieuzonering: ['ECLI:NL:RBDHA:2019:7543'],
-  data: ['ECLI:EU:C:2022:44'],
-  'data retention': ['ECLI:EU:C:2022:44'],
-  zorgverzekering: ['ECLI:NL:RBMNE:2022:1189'],
+// --- retrieval methods --------------------------------------------------------
+// The service (bluelab/retrieval) ranks provisions and scores a document by
+// its best provision — the demo mirrors that shape so the view is exercised
+// the way production data hits it. BM25 and TF-IDF run for real over the
+// in-memory corpus; SBERT cannot (no model in a browser), so it stands in as
+// a deterministic hashed n-gram embedding approximation.
+
+/** The demo's methods, in the shape the provision-retriever's picker takes. */
+export const DEMO_METHODS = [
+  { id: 'tfidf', label: 'TF-IDF' },
+  { id: 'bm25', label: 'BM25' },
+  { id: 'sbert', label: 'SBERT (approx.)' },
+]
+
+const STOPWORDS = new Set([
+  'de', 'het', 'een', 'en', 'van', 'in', 'op', 'voor', 'met', 'dat', 'die', 'is', 'zijn', 'aan', 'te', 'onder', 'bij', 'door', 'uit', 'the', 'a', 'an', 'of', 'to', 'and', 'in', 'is', 'it', 'be', 'are',
+])
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9àáäâèéëêìíïîòóöôùúüûñç]+/i)
+    .filter((token) => token.length >= 2 && !STOPWORDS.has(token))
+}
+
+interface IndexedSegment {
+  doc: DemoDocument
+  segment: { id: string; text: string }
+  tokens: string[]
+}
+
+const INDEX: IndexedSegment[] = CORPUS.flatMap((doc) =>
+  doc.segments.map((segment) => ({ doc, segment, tokens: tokenize(`${doc.title} ${segment.text}`) })),
+)
+
+/** Okapi BM25 (k1=1.5, b=0.75) over the segments, as the service's bm25.py does. */
+function bm25Scores(query: string): Map<IndexedSegment, number> {
+  const terms = tokenize(query)
+  const scores = new Map<IndexedSegment, number>()
+  if (!terms.length) return scores
+  const k1 = 1.5
+  const b = 0.75
+  const avgLen = INDEX.reduce((sum, entry) => sum + entry.tokens.length, 0) / INDEX.length
+  const docFreq = new Map<string, number>()
+  for (const term of new Set(terms)) {
+    docFreq.set(term, INDEX.filter((entry) => entry.tokens.includes(term)).length)
+  }
+  for (const entry of INDEX) {
+    const len = entry.tokens.length
+    const tf = new Map<string, number>()
+    for (const token of entry.tokens) tf.set(token, (tf.get(token) ?? 0) + 1)
+    let score = 0
+    for (const term of terms) {
+      const df = docFreq.get(term) ?? 0
+      if (!df) continue
+      const idf = Math.log(1 + (INDEX.length - df + 0.5) / (df + 0.5))
+      const freq = tf.get(term) ?? 0
+      score += idf * ((freq * (k1 + 1)) / (freq + k1 * (1 - b + b * (len / avgLen))))
+    }
+    if (score > 0) scores.set(entry, score)
+  }
+  return scores
+}
+
+/** Cosine similarity of TF-IDF vectors, as the service's tfidf.py does. */
+function tfidfScores(query: string): Map<IndexedSegment, number> {
+  const terms = tokenize(query)
+  const scores = new Map<IndexedSegment, number>()
+  if (!terms.length) return scores
+  const docFreq = new Map<string, number>()
+  for (const term of new Set(terms)) {
+    docFreq.set(term, INDEX.filter((entry) => entry.tokens.includes(term)).length)
+  }
+  const idf = (term: string): number => {
+    const df = docFreq.get(term) ?? 0
+    return Math.log((INDEX.length + 1) / (df + 1)) + 1
+  }
+  const queryTf = new Map<string, number>()
+  for (const term of terms) queryTf.set(term, (queryTf.get(term) ?? 0) + 1)
+  const queryVector = new Map<string, number>()
+  let queryNorm = 0
+  for (const [term, freq] of queryTf) {
+    const weight = (1 + Math.log(freq)) * idf(term)
+    queryVector.set(term, weight)
+    queryNorm += weight * weight
+  }
+  queryNorm = Math.sqrt(queryNorm)
+  for (const entry of INDEX) {
+    const tf = new Map<string, number>()
+    for (const token of entry.tokens) tf.set(token, (tf.get(token) ?? 0) + 1)
+    let dot = 0
+    let norm = 0
+    for (const [token, freq] of tf) {
+      const weight = (1 + Math.log(freq)) * (docFreq.has(token) ? idf(token) : Math.log((INDEX.length + 1) / 1) + 1)
+      tf.set(token, weight)
+      norm += weight * weight
+    }
+    for (const [term, weight] of queryVector) dot += weight * (tf.get(term) ?? 0)
+    norm = Math.sqrt(norm)
+    if (dot > 0 && norm > 0) scores.set(entry, dot / (norm * queryNorm))
+  }
+  return scores
+}
+
+/**
+ * SBERT stand-in: cosine over hashed character-trigram embeddings, L2
+ * normalized. It captures shared morphology (which lexical scoring misses)
+ * without a model, and is only ever a demo approximation — the label says so.
+ */
+function sbertScores(query: string): Map<IndexedSegment, number> {
+  const trigrams = (text: string): string[] => {
+    const padded = `  ${text.toLowerCase()}  `
+    const grams: string[] = []
+    for (let i = 0; i < padded.length - 2; i++) grams.push(padded.slice(i, i + 3))
+    return grams
+  }
+  const BUCKETS = 512
+  const embed = (text: string): Map<number, number> => {
+    const vector = new Map<number, number>()
+    for (const gram of trigrams(text)) {
+      let hash = 2166136261
+      for (let i = 0; i < gram.length; i++) {
+        hash ^= gram.charCodeAt(i)
+        hash = Math.imul(hash, 16777619)
+      }
+      const bucket = Math.abs(hash) % BUCKETS
+      vector.set(bucket, (vector.get(bucket) ?? 0) + 1)
+    }
+    let norm = 0
+    for (const value of vector.values()) norm += value * value
+    norm = Math.sqrt(norm)
+    for (const [bucket, value] of vector) vector.set(bucket, value / norm)
+    return vector
+  }
+  const queryVector = embed(query)
+  const scores = new Map<IndexedSegment, number>()
+  if (!query.trim()) return scores
+  for (const entry of INDEX) {
+    const vector = embed(`${entry.doc.title} ${entry.segment.text}`)
+    let dot = 0
+    for (const [bucket, value] of queryVector) dot += value * (vector.get(bucket) ?? 0)
+    if (dot > 0) scores.set(entry, dot)
+  }
+  return scores
+}
+
+function normalise(scores: Map<IndexedSegment, number>): Map<IndexedSegment, number> {
+  let max = 0
+  for (const value of scores.values()) max = Math.max(max, value)
+  if (max > 0) for (const [entry, value] of scores) scores.set(entry, value / max)
+  return scores
 }
 
 /** Stand-in for the retrieval endpoint. Mirrors what a server would return:
  * ranked IR results plus the document relations, so a host can build a
- * document-relation graph out of one search. */
-export async function search(payload: { query?: string }): Promise<{
+ * document-relation graph out of one search. A document's score is its best
+ * provision's score, and its provisions arrive ranked under it. */
+export async function search(payload: { query?: string; method?: string }): Promise<{
   query: string
+  method: string
   receivedAt: string
   results: IRResult[]
   relations: DemoRelation[]
 }> {
   await delay(200)
   const query = payload?.query ?? ''
-  const q = query.toLowerCase()
-  const matched = q
-    ? CORPUS.filter(
-        (d) =>
-          d.title.toLowerCase().includes(q) ||
-          d.segments.some((s) => s.text.toLowerCase().includes(q)) ||
-          (TERM_CORPUS[q] ?? []).includes(d.id),
-      )
-    : CORPUS
+  const method = payload?.method ?? 'bm25'
 
-  const results: IRResult[] = matched.map((doc, index) => {
-    // A deterministic pseudo-score: term hits rank first.
-    const hit = q && doc.title.toLowerCase().includes(q) ? 0.9 : 0.55 + index * 0.05
-    const hitSegment = doc.segments.find((s) => s.text.toLowerCase().includes(q))
-    const snippet = hitSegment?.text ?? doc.segments[0]?.text ?? ''
-    const start = q && snippet.toLowerCase().includes(q) ? snippet.toLowerCase().indexOf(q) : -1
+  // Every doc, no query: a flat ranking so the view still has something to show.
+  const segmentScores =
+    !query.trim()
+      ? new Map(INDEX.map((entry) => [entry, 0.5]))
+      : normalise(
+          method === 'tfidf' ? tfidfScores(query) : method === 'sbert' ? sbertScores(query) : bm25Scores(query),
+        )
+
+  const byDoc = new Map<string, { doc: DemoDocument; segments: { id: string; text: string; score: number }[] }>()
+  for (const [entry, score] of segmentScores) {
+    const bucket = byDoc.get(entry.doc.id) ?? { doc: entry.doc, segments: [] }
+    bucket.segments.push({ id: entry.segment.id, text: entry.segment.text, score })
+    byDoc.set(entry.doc.id, bucket)
+  }
+
+  const ranked = Array.from(byDoc.values())
+    .map(({ doc, segments }) => {
+      segments.sort((a, b) => b.score - a.score)
+      return { doc, segments }
+    })
+    .filter(({ segments }) => segments.length > 0)
+    .sort((a, b) => b.segments[0].score - a.segments[0].score)
+
+  const results: IRResult[] = ranked.map(({ doc, segments }, index) => {
+    const top = segments[0]
+    const snippet = top?.text ?? doc.segments[0]?.text ?? ''
     return {
       id: doc.id,
       title: doc.title,
-      score: hit,
+      score: top?.score ?? 0,
       snippet,
-      highlights: start >= 0 ? [{ start, end: start + q.length }] : [],
+      highlights: termRangesIn(snippet, query),
       rank: index + 1,
-      segments: doc.segments.map((s) => ({ id: s.id, text: s.text, score: 0.3 })),
+      segments,
       metadata: { date: doc.date, instance: doc.instance },
     }
   })
@@ -172,10 +330,27 @@ export async function search(payload: { query?: string }): Promise<{
   const ids = new Set(results.map((r) => r.id))
   return {
     query,
+    method,
     receivedAt: new ISO(),
     results,
     relations: RELATIONS.filter((r) => ids.has(r.source) && ids.has(r.target)),
   }
+}
+
+/** The query's own words, at their positions in the snippet, as highlight ranges. */
+function termRangesIn(text: string, query: string): { start: number; end: number }[] {
+  const ranges: { start: number; end: number }[] = []
+  const lowered = text.toLowerCase()
+  for (const term of tokenize(query)) {
+    let from = 0
+    for (;;) {
+      const at = lowered.indexOf(term, from)
+      if (at < 0) break
+      ranges.push({ start: at, end: at + term.length })
+      from = at + term.length
+    }
+  }
+  return ranges
 }
 
 function ISO() {
