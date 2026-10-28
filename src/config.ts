@@ -138,6 +138,14 @@ export interface VisualizerConfig {
    */
   documentsView?: 'table' | 'results'
   /**
+   * How the results view's provision list overflows: 'scroll' (default)
+   * scrolls a bounded frame; 'paginate' slices the sorted list into pages of
+   * `segmentsPerPage` behind a pager.
+   */
+  segmentOverflow?: 'scroll' | 'paginate'
+  /** Provisions per page when segmentOverflow is 'paginate'. Default 20. */
+  segmentsPerPage?: number
+  /**
    * The score threshold the IR results view starts from: cards below it dim,
    * provisions below it are not pre-ticked. The host's slider overrides it
    * at runtime through the `threshold` prop.
@@ -509,6 +517,8 @@ export function mergeVisualizerConfig(
     columns: override.columns ?? base.columns,
     views: override.views ?? base.views,
     documentsView: override.documentsView ?? base.documentsView,
+    segmentOverflow: override.segmentOverflow ?? base.segmentOverflow,
+    segmentsPerPage: override.segmentsPerPage ?? base.segmentsPerPage,
     threshold: override.threshold ?? base.threshold,
     relevanceField: override.relevanceField ?? base.relevanceField,
     snippetField: override.snippetField ?? base.snippetField,

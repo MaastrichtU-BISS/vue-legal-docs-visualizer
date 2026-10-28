@@ -27,6 +27,8 @@ const {
   queryTerms,
   sortedSegments,
   visibleTabs,
+  segmentPage,
+  pageCount,
 } = mod
 
 test('score color bands: green above .5, ocean above .3, amber below', () => {
@@ -101,4 +103,27 @@ test('visibleTabs: a segmented result offers provisions (and the document tab wi
 test('visibleTabs: a segment-less result never offers the provisions tab', () => {
   assert.deepEqual(visibleTabs(0, true), ['document'])
   assert.deepEqual(visibleTabs(0, false), [])
+})
+
+// --- segment pagination (issue #16) ---------------------------------------------
+
+const PAGE_SEGMENTS = Array.from({ length: 45 }, (_, i) => ({ id: `s${i + 1}`, text: `t${i + 1}` }))
+
+test('segmentPage slices the sorted list; the last page may be partial', () => {
+  assert.deepEqual(segmentPage(PAGE_SEGMENTS, 0, 20).map((s) => s.id), PAGE_SEGMENTS.slice(0, 20).map((s) => s.id))
+  assert.deepEqual(segmentPage(PAGE_SEGMENTS, 2, 20).map((s) => s.id), ['s41', 's42', 's43', 's44', 's45'])
+  assert.deepEqual(segmentPage(PAGE_SEGMENTS, 3, 20), [])
+})
+
+test('segmentPage tolerates a degenerate page size', () => {
+  assert.equal(segmentPage(PAGE_SEGMENTS, 0, 0).length, 1)
+  assert.equal(segmentPage(PAGE_SEGMENTS, 1, 0).length, 1)
+  assert.deepEqual(segmentPage(PAGE_SEGMENTS, 0, 0)[0].id, 's1')
+})
+
+test('pageCount rounds up and never reports zero', () => {
+  assert.equal(pageCount(45, 20), 3)
+  assert.equal(pageCount(40, 20), 2)
+  assert.equal(pageCount(0, 20), 1)
+  assert.equal(pageCount(45, 0), 45)
 })
