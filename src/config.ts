@@ -510,6 +510,8 @@ export function mergeVisualizerConfig(
     columns: override.columns ?? base.columns,
     views: override.views ?? base.views,
     documentsView: override.documentsView ?? base.documentsView,
+    segmentOverflow: override.segmentOverflow ?? base.segmentOverflow,
+    segmentsPerPage: override.segmentsPerPage ?? base.segmentsPerPage,
     threshold: override.threshold ?? base.threshold,
     relevanceField: override.relevanceField ?? base.relevanceField,
     snippetField: override.snippetField ?? base.snippetField,

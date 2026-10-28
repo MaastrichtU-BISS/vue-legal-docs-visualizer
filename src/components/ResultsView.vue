@@ -123,7 +123,7 @@
                     <button type="button" :disabled="page >= pages - 1" @click="page++">Next ›</button>
                 </div>
 
-                <div v-else class="document-view">
+                <div v-if="tab === 'document'" class="document-view">
                     <p v-if="docLoading" class="doc-note">Loading…</p>
                     <p v-else-if="docError" class="doc-error" data-test="document-error">{{ docError }}</p>
                     <template v-else-if="docDetail">
