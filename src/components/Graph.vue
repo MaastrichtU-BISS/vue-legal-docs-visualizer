@@ -940,7 +940,7 @@ const initGraph = async () => {
           'color': '#ffffff',
           'text-outline-width': 2,
           'text-outline-color': 'data(color)',
-          'text-max-width': 0,
+          'text-max-width': '0',
           'text-wrap': 'none'
         }
       },
