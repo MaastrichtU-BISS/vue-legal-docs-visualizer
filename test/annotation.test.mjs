@@ -140,3 +140,56 @@ test('no assignments yields nodes with no edges', () => {
   assert.equal(set.nodes.length, 5)
   assert.deepEqual(set.edges, [])
 })
+
+// --- segment metadata pass-through (issue #13) --------------------------------
+
+const META_RESULTS = [
+  {
+    id: 'bbnj',
+    title: 'BBNJ Agreement',
+    score: 0.8,
+    segments: [
+      {
+        id: 'bbnj_art1_2',
+        text: '“Areas beyond national jurisdiction” means the high seas and the Area.',
+        metadata: {
+          article: 'Art. 1',
+          paragraph: '2',
+          title: 'Use of terms',
+          section: 'PART I — GENERAL PROVISIONS',
+        },
+      },
+    ],
+  },
+]
+
+test('segment metadata is copied verbatim onto the node data', () => {
+  const set = assignmentsToDocumentSet(META_RESULTS, [])
+  assert.equal(set.nodes.length, 2) // parent + segment
+  const seg = set.nodes.find((n) => n.id === 'bbnj_art1_2')
+  assert.equal(seg.data.article, 'Art. 1')
+  assert.equal(seg.data.paragraph, '2')
+  assert.equal(seg.data.section, 'PART I — GENERAL PROVISIONS')
+  // the parent document node is built from the result, not the segment
+  const parent = set.nodes.find((n) => n.id === 'bbnj')
+  assert.ok(!('article' in parent.data))
+})
+
+test('metadata wins on collision with builder-derived fields', () => {
+  const set = assignmentsToDocumentSet(META_RESULTS, [])
+  const seg = set.nodes.find((n) => n.id === 'bbnj_art1_2')
+  // the article heading takes `title`; the node's identity does not move
+  assert.equal(seg.data.title, 'Use of terms')
+  assert.equal(seg.id, 'bbnj_art1_2')
+  // untouched structural fields survive
+  assert.equal(seg.data.parent, 'bbnj')
+  assert.equal(seg.data.type, 'segment')
+})
+
+test('segments without metadata keep today’s data shape', () => {
+  const set = assignmentsToDocumentSet(RESULTS, [])
+  const seg = set.nodes.find((n) => n.id === 'doc1_s1')
+  assert.equal(seg.data.title, 'doc1_s1')
+  assert.ok(!('metadata' in seg.data))
+  assert.ok(!('article' in seg.data))
+})

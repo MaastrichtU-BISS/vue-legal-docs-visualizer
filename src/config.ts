@@ -554,6 +554,12 @@ export interface IRSegment {
   id: string
   text: string
   score?: number
+  /** Free-form display fields the host carries per segment (e.g. article,
+   * paragraph, section). The annotated-graph builder copies these verbatim
+   * onto the node's data — on collision they win over the builder-derived
+   * fields — and hosts name them in the display config. Keep structural
+   * keys (id, parent, type) out: overriding them changes what the node is. */
+  metadata?: Record<string, unknown>
 }
 
 export interface IRResult {

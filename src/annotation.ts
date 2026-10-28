@@ -167,6 +167,9 @@ export function assignmentsToDocumentSet(
             ? { span_count: segmentAssignment.document_annotations.length }
             : {}),
           ...(tags.length > 0 ? { document_tags: tags } : {}),
+          // Host-carried display fields flow verbatim and win on collision
+          // (e.g. the scenario's article heading takes `title`).
+          ...(segment.metadata ?? {}),
         },
       })
     }
