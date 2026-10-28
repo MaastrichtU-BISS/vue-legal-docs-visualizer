@@ -48,12 +48,22 @@
     <div ref="cyContainer" class="cy-container"></div>
     <div ref="tooltip" class="graph-tooltip">
       <div class="graph-tooltip-arrow"></div>
-      <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
-      <div v-if="tooltipContent.title" class="tooltip-title">{{ tooltipContent.title }}</div>
-      <ul v-if="tooltipContent.provisions.length > 0" class="tooltip-provisions">
-        <li v-for="(provision, index) in tooltipContent.provisions" :key="index">{{ provision }}</li>
+      <div class="tooltip-headline">{{ tooltipView.headline }}</div>
+      <div v-if="tooltipView.title" class="tooltip-title">{{ tooltipView.title }}</div>
+      <div v-if="tooltipView.subtitle" class="tooltip-subtitle">{{ tooltipView.subtitle }}</div>
+      <ul v-if="tooltipProvisions.length > 0" class="tooltip-provisions">
+        <li v-for="(provision, index) in tooltipProvisions" :key="index">{{ provision }}</li>
       </ul>
-      <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
+      <!-- A single configured line renders as the old unlabeled summary slot;
+           several render as labeled rows. -->
+      <div v-if="tooltipView.lines.length === 1" class="tooltip-summary">{{ tooltipView.lines[0].text }}</div>
+      <div v-else-if="tooltipView.lines.length > 1" class="tooltip-lines">
+        <div v-for="(line, index) in tooltipView.lines" :key="index" class="tooltip-line">
+          <span class="tooltip-line-label">{{ line.label }}</span>
+          <span class="tooltip-line-text" :class="{ 'tooltip-line-clamp': line.clamp }">{{ line.text }}</span>
+        </div>
+      </div>
+      <div v-else class="tooltip-summary">{{ tooltipView.fallback }}</div>
     </div>
     <div
       ref="clusterTooltip"
@@ -118,6 +128,7 @@ import {
   type VisualizerConfig,
 } from '../config'
 import { resolveMetricField, nodeMetric, metricRange, metricToSize, metricToColor, passesMinRelevance } from '../relevance'
+import { buildTooltipView, fieldValue, type TooltipView } from '../graph-tooltip'
 
 // Dynamically import and register cytoscape-popper
 let popperRegistered = false
@@ -178,13 +189,6 @@ const effectiveGraph = computed<DocumentSetV1>(
 const effectiveConfig = computed<VisualizerConfig>(() => resolveVisualizerConfig(props.config) ?? caseLawConfig)
 const graphNodes = computed<GraphNode[]>(() => effectiveGraph.value.nodes)
 const graphEdges = computed(() => effectiveGraph.value.edges)
-
-/** Read a display field from a node, tolerating missing values. */
-function fieldValue(node: GraphNode, field?: string): string | undefined {
-  if (!field) return undefined
-  const value = node.data?.[field]
-  return value === undefined || value === null || value === '' ? undefined : String(value)
-}
 
 function nodeLabel(node: GraphNode): string {
   return fieldValue(node, effectiveConfig.value.nodes.label) ?? node.id
@@ -266,7 +270,8 @@ const applyFilters = () => {
       nodeId,
       docData?.data?.summary,
       docData?.data?.conclusion,
-      ...(effectiveConfig.value.tooltip?.lines ?? []).map((line) => docData?.data?.[line.field]),
+      ...(effectiveConfig.value.tooltip?.lines ?? []).map((line) =>
+        line.value ? line.value(docData) : docData?.data?.[line.field]),
     ]
       .filter((value) => value !== undefined && value !== null && value !== '')
       .join(' ')
@@ -357,7 +362,8 @@ const updateSelectionCount = () => {
 
 const cyContainer = ref<HTMLElement | null>(null)
 const tooltip = ref<HTMLElement | null>(null)
-const tooltipContent = ref({ ecli: '', title: '', summary: '', provisions: [] as string[] })
+const tooltipView = ref<TooltipView>(buildTooltipView({ id: '', data: {} }))
+const tooltipProvisions = ref<string[]>([])
 let cy: Core | null = null
 let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
 let currentPopper: any = null
@@ -1095,12 +1101,8 @@ const initGraph = async () => {
     }
 
     const cfg = effectiveConfig.value
-    tooltipContent.value = {
-      ecli: docData.id || '',
-      title: fieldValue(docData, cfg.tooltip?.subtitle) ?? '',
-      summary: fieldValue(docData, cfg.tooltip?.lines?.[0]?.field) ?? 'No summary available',
-      provisions: Array.isArray(docData.data?.legal_provisions) ? docData.data.legal_provisions : []
-    }
+    tooltipView.value = buildTooltipView(docData, cfg.tooltip)
+    tooltipProvisions.value = Array.isArray(docData.data?.legal_provisions) ? docData.data.legal_provisions : []
 
     // Show tooltip after a delay
     tooltipTimeout = setTimeout(() => {
@@ -1365,7 +1367,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.tooltip-ecli {
+.tooltip-headline {
   font-weight: 600;
   margin-bottom: 4px;
   font-size: 10px;
@@ -1378,6 +1380,38 @@ onBeforeUnmount(() => {
   margin-bottom: 4px;
   font-size: 11px;
   color: #212529;
+}
+
+.tooltip-subtitle {
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: #212529;
+}
+
+.tooltip-lines {
+  margin-top: 6px;
+}
+
+.tooltip-line {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #495057;
+  margin-bottom: 3px;
+}
+
+.tooltip-line-label {
+  font-weight: 600;
+  color: #6c757d;
+  margin-right: 4px;
+}
+
+.tooltip-line-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .tooltip-provisions {

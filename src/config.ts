@@ -84,9 +84,16 @@ export interface ColumnConfig {
 export interface TooltipLine {
   label: string
   field: string
+  /** Derive the value from the node (e.g. compose article and paragraph).
+   * Falls back to `data[field]`; wins when both exist. */
+  value?: (node: GraphNode) => unknown
+  /** Long text (e.g. a provision's full text) clamps to a few lines. */
+  clamp?: boolean
 }
 
 export interface TooltipConfig {
+  /** Field for the tooltip's top line. Default: the node id. */
+  headline?: string
   title?: string
   subtitle?: string
   lines?: TooltipLine[]
