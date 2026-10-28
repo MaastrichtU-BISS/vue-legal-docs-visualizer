@@ -1,5 +1,5 @@
 <template>
-    <Drawer v-model:visible="isVisible" position="right" :modal="false" class="document-drawer" :style="{ width: '400px' }">
+    <Dialog v-model:visible="isVisible" modal maximizable class="document-drawer" :style="{ width: 'min(920px, 94vw)' }">
         <template #header>
             <div class="drawer-header">
                 <h2>{{ entityLabel }} Details</h2>
@@ -107,12 +107,12 @@
                 </ul>
             </div>
         </div>
-    </Drawer>
+    </Dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import Drawer from 'primevue/drawer'
+import Dialog from 'primevue/dialog'
 import type { LegalDocument, LegalEdge } from './types'
 import {
   caseLawConfig,
@@ -179,7 +179,13 @@ const summary = computed<string | undefined>(() => {
 // `selectedSegmentIds`, its set is what the panel renders.
 const segments = computed<IRSegment[]>(() => {
     const value = data.value.segments
-    return Array.isArray(value) ? (value as IRSegment[]) : []
+    if (!Array.isArray(value)) return []
+    const list = value as IRSegment[]
+    const selected = selectedSegmentIds.value
+    if (selected.size === 0) return list
+    // The picked provisions first, the rest after; each group keeps the
+    // document's own order, so a stable sort is enough.
+    return [...list].sort((a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)))
 })
 
 const localSelectedSegmentIds = ref<Set<string>>(new Set())
@@ -298,17 +304,14 @@ const formatStatValue = (value: any): string => {
 </script>
 
 <style>
-/* Non-scoped to apply to PrimeVue Drawer which renders outside component tree */
+/* Non-scoped to apply to PrimeVue Dialog which renders outside component tree */
 .document-drawer {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
 }
 </style>
 
 <style scoped>
-.document-drawer {
-    width: 1000px;
-}
-
+/* The width is set inline (min(920px, 94vw)); the class carries the rest. */
 .drawer-header h2 {
     margin: 0;
     font-size: 16px;
@@ -373,8 +376,6 @@ const formatStatValue = (value: any): string => {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    max-height: 320px;
-    overflow-y: auto;
 }
 
 .segment-item {
