@@ -495,19 +495,29 @@ mark.ir-highlight {
   color: inherit;
 }
 
+/* The viewer is a frame: header/meta/tabs stay put, only the tab content
+ * scrolls. Without this the whole panel scrolled as one unit and the chrome
+ * disappeared under a long provision list. */
 .viewer-panel {
   flex: 1;
-  overflow-y: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 16px;
 }
 
 .viewer-empty {
   color: #6b7280;
   font-size: 14px;
-  height: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.viewer-head {
+  flex-shrink: 0;
 }
 
 .viewer-head h2 {
@@ -525,6 +535,7 @@ mark.ir-highlight {
 }
 
 .viewer-tabs {
+  flex-shrink: 0;
   display: flex;
   gap: 6px;
   border-bottom: 1px solid #dee2e6;
@@ -549,6 +560,9 @@ mark.ir-highlight {
 }
 
 .provision-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -614,6 +628,12 @@ mark.ir-highlight {
   font-size: 13px;
   line-height: 1.5;
   color: #374151;
+}
+
+.document-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .document-view .doc-title {
