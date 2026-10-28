@@ -22,7 +22,10 @@
     "build": "vite build && vue-tsc --project tsconfig.build.json",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "pnpm build",
+    "demo": "vite --config vite.demo.config.ts",
+    "build:demo": "vite build --config vite.demo.config.ts"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
@@ -43,6 +46,7 @@
     "@primeuix/themes": "^2.0.3",
     "@types/cytoscape": "^3.31.0",
     "@vitejs/plugin-vue": "^5.0.4",
+    "legal-annotation-kit": "file:../vue-legal-annotation-kit",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",
     "typescript": "^5.4.5",

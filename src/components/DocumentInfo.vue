@@ -1,121 +1,82 @@
 <template>
-    <Drawer v-model:visible="isVisible" position="right" :modal="false" class="document-drawer" :style="{ width: '400px' }">
+    <component
+        :is="overlayComponent"
+        v-model:visible="isVisible"
+        class="document-drawer"
+        :style="{ width: overlayWidth }"
+        v-bind="overlayProps"
+    >
         <template #header>
             <div class="drawer-header">
-                <h2>Document Details</h2>
+                <h2>{{ entityLabel }} Details</h2>
             </div>
         </template>
 
-        <div v-if="document" class="document-content">
-            <!-- ECLI Section -->
+        <div v-if="activeNode" class="document-content">
+            <!-- Identifier -->
             <div class="info-section">
                 <h3 class="section-title">Identifier</h3>
                 <div class="info-field">
-                    <span class="field-label">ECLI:</span>
-                    <span class="field-value">{{ document.id }}</span>
+                    <span class="field-label">{{ idLabel }}:</span>
+                    <span class="field-value">{{ activeNode.id }}</span>
                 </div>
             </div>
 
-            <!-- Basic Information -->
-            <div class="info-section" v-if="document.data">
+            <!-- Configured details -->
+            <div class="info-section" v-if="visibleDetails.length > 0">
                 <h3 class="section-title">Basic Information</h3>
-                
-                <div class="info-field" v-if="displayDate">
-                    <span class="field-label">Date:</span>
-                    <span class="field-value">{{ displayDate }}</span>
+                <div class="info-field" v-for="detail in visibleDetails" :key="detail.label + detail.field">
+                    <span class="field-label">{{ detail.label }}:</span>
+                    <a v-if="detail.type === 'link'" :href="detailHref(detail)" target="_blank" class="publication-link">
+                        {{ detailDisplay(detail) }} <i class="pi pi-external-link"></i>
+                    </a>
+                    <span v-else class="field-value">{{ detailDisplay(detail) }}</span>
                 </div>
-
-                <template v-if="rsData">
-                    <div class="info-field" v-if="rsData.instance">
-                        <span class="field-label">Instance:</span>
-                        <span class="field-value">{{ rsData.instance }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.domains && rsData.domains.length > 0">
-                        <span class="field-label">Domains:</span>
-                        <span class="field-value">{{ rsData.domains.join(', ') }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.document_type">
-                        <span class="field-label">Document Type:</span>
-                        <span class="field-value">{{ rsData.document_type }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.procedure_type">
-                        <span class="field-label">Procedure Type:</span>
-                        <span class="field-value">{{ rsData.procedure_type }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="rsData.jurisdiction_country">
-                        <span class="field-label">Jurisdiction:</span>
-                        <span class="field-value">{{ rsData.jurisdiction_country }}</span>
-                    </div>
-                </template>
-
-                <template v-else-if="echrData">
-                    <div class="info-field" v-if="echrData.respondent_state">
-                        <span class="field-label">Respondent State:</span>
-                        <span class="field-value">{{ echrData.respondent_state }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="echrData.keywords && echrData.keywords.length > 0">
-                        <span class="field-label">Keywords:</span>
-                        <span class="field-value">{{ echrData.keywords.join(', ') }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="echrData.document_type">
-                        <span class="field-label">Document Type:</span>
-                        <span class="field-value">{{ echrData.document_type }}</span>
-                    </div>
-
-                    <div class="info-field" v-if="echrData.importance !== undefined && echrData.importance !== null">
-                        <span class="field-label">Importance:</span>
-                        <span class="field-value">{{ echrData.importance }}/4</span>
-                    </div>
-                </template>
             </div>
 
             <!-- Summary -->
-            <div class="info-section" v-if="rsData?.summary">
+            <div class="info-section" v-if="summary">
                 <h3 class="section-title">Summary</h3>
-                <p class="summary-text">{{ rsData.summary }}</p>
-            </div>
-            <div class="info-section" v-else-if="echrData?.conclusion">
-                <h3 class="section-title">Conclusion</h3>
-                <p class="summary-text">{{ echrData.conclusion }}</p>
+                <p class="summary-text">{{ summary }}</p>
             </div>
 
-            <!-- Legal Provisions -->
-            <div class="info-section" v-if="rsData?.legal_provisions && rsData.legal_provisions.length > 0">
-                <h3 class="section-title">Legal Provisions</h3>
-                <ul class="provision-list">
-                    <li v-for="(provision, index) in rsData.legal_provisions" :key="index">
-                        {{ provision }}
-                    </li>
-                </ul>
-            </div>
+            <!-- Segments (provisions), overridable via the `segments` slot -->
+            <slot
+                v-if="segments.length > 0"
+                name="segments"
+                :segments="segments"
+                :node="activeNode"
+                :selected="selectedSegmentIds"
+            >
+                <div class="info-section">
+                    <h3 class="section-title">Segments ({{ segments.length }})</h3>
+                    <ul class="segment-list">
+                        <li
+                            v-for="segment in segments"
+                            :key="segment.id"
+                            class="segment-item"
+                            :class="{ selected: selectedSegmentIds.has(segment.id) }"
+                            @click="toggleSegment(segment)"
+                        >
+                            <span class="segment-check" aria-hidden="true">
+                                <i :class="selectedSegmentIds.has(segment.id) ? 'pi pi-check-circle' : 'pi pi-circle'" />
+                            </span>
+                            <span class="segment-text">{{ segment.text }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </slot>
 
-            <!-- Articles (ECHR only) -->
-            <div class="info-section"
-                v-if="echrData && (toArticleList(echrData.article_violated).length > 0 || toArticleList(echrData.article_applied).length > 0)">
-                <h3 class="section-title">Articles</h3>
-                <div class="info-field" v-if="toArticleList(echrData.article_violated).length > 0">
-                    <span class="field-label">Violated:</span>
-                    <span class="field-value">{{ toArticleList(echrData.article_violated).join(', ') }}</span>
-                </div>
-                <div class="info-field" v-if="toArticleList(echrData.article_applied).length > 0">
-                    <span class="field-label">Applied:</span>
-                    <span class="field-value">{{ toArticleList(echrData.article_applied).join(', ') }}</span>
-                </div>
-            </div>
+            <!-- Host extra content -->
+            <slot name="details-extra" :node="activeNode" :config="activeConfig" />
 
             <!-- Statistics -->
-            <div class="info-section" v-if="document.data?.statistics">
+            <div class="info-section" v-if="statistics">
                 <h3 class="section-title">Statistics</h3>
                 <div class="stats-list">
-                    <div class="info-field" v-for="(value, key) in document.data.statistics" :key="key">
+                    <div class="info-field" v-for="(value, key) in statistics" :key="key">
                         <template v-if="key != 'parent'">
-                            <span class="field-label">{{ formatStatKey(key) }}:</span>
+                            <span class="field-label">{{ formatStatKey(String(key)) }}:</span>
                             <span class="field-value">{{ formatStatValue(value) }}</span>
                         </template>
                     </div>
@@ -127,7 +88,7 @@
                 <h3 class="section-title">Cites ({{ documentCites.length }})</h3>
                 <ul class="citation-list">
                     <li v-for="(cite, index) in documentCites" :key="index">
-                        <span v-if="isEcliInDocs(cite)" class="citation-link" @click="handleCitationClick(cite)">
+                        <span v-if="isNodeInGraph(cite)" class="citation-link" @click="handleCitationClick(cite)">
                             {{ cite }}
                         </span>
                         <span v-else class="citation-text">
@@ -142,7 +103,7 @@
                 <h3 class="section-title">Cited By ({{ documentCitedBy.length }})</h3>
                 <ul class="citation-list">
                     <li v-for="(cite, index) in documentCitedBy" :key="index">
-                        <span v-if="isEcliInDocs(cite)" class="citation-link" @click="handleCitationClick(cite)">
+                        <span v-if="isNodeInGraph(cite)" class="citation-link" @click="handleCitationClick(cite)">
                             {{ cite }}
                         </span>
                         <span v-else class="citation-text">
@@ -151,85 +112,173 @@
                     </li>
                 </ul>
             </div>
-
-            <!-- URL -->
-            <div class="info-section" v-if="rsData?.url_publication">
-                <h3 class="section-title">Publication</h3>
-                <a :href="rsData.url_publication" target="_blank" class="publication-link">
-                    View Full Text <i class="pi pi-external-link"></i>
-                </a>
-            </div>
-            <div class="info-section" v-else-if="echrData?.itemid">
-                <h3 class="section-title">Publication</h3>
-                <a :href="buildHudocUrl(echrData.itemid)" target="_blank" class="publication-link">
-                    View Full Text <i class="pi pi-external-link"></i>
-                </a>
-            </div>
         </div>
-    </Drawer>
+    </component>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import type { RechtspraakDocumentData, EchrDocumentData } from 'legal-docs-types'
-import { isEchrDocument, type LegalDocument, type LegalEdge } from './types'
+import Dialog from 'primevue/dialog'
 import Drawer from 'primevue/drawer'
+import type { LegalDocument, LegalEdge } from './types'
+import {
+  caseLawConfig,
+  resolveVisualizerConfig,
+  type DetailField,
+  type DocumentSetV1,
+  type GraphNode,
+  type IRSegment,
+  type VisualizerConfig,
+} from '../config'
 
 export interface Props {
+    /** The selected node (canonical). */
+    node?: GraphNode | null
+    /** A preset id or a full config. Defaults to the case-law preset. */
+    config?: VisualizerConfig | string
+    /** The full graph, for citation lookup. */
+    graph?: DocumentSetV1
+    /** Legacy input, still supported. */
     document?: LegalDocument | null
-    visible?: boolean
     docs?: LegalDocument[]
     edges?: LegalEdge[]
+    visible?: boolean
+    /**
+     * The host's selected segments, when it owns the selection.
+     *
+     * Without it the panel keeps its own toggle state, which is what a
+     * read-only viewer wants. With it the panel renders the host's set and
+     * still reports every toggle, so the host stays the single source of
+     * truth (the annotation step needs the whole set, not a delta).
+     */
+    selectedSegmentIds?: string[]
 }
 
 const props = defineProps<Props>()
 
-const rsData = computed<RechtspraakDocumentData | null>(() =>
-    props.document && !isEchrDocument(props.document) ? props.document.data as RechtspraakDocumentData : null
-)
+// The presentation is a build-time decision, not a runtime prop: the
+// consuming app's Vite `define` replaces the constant, the bundler folds
+// the branch away, and what ships cannot be switched at runtime.
+const DETAILS_PRESENTATION: 'drawer' | 'modal' =
+    typeof __LEGAL_VISUALIZER_DETAILS_PRESENTATION__ !== 'undefined'
+        ? __LEGAL_VISUALIZER_DETAILS_PRESENTATION__
+        : 'modal'
+const overlayComponent = DETAILS_PRESENTATION === 'drawer' ? Drawer : Dialog
+const overlayProps =
+    DETAILS_PRESENTATION === 'drawer'
+        ? { position: 'right', modal: false }
+        : { modal: true, maximizable: true }
+const overlayWidth = DETAILS_PRESENTATION === 'drawer' ? '400px' : 'min(920px, 94vw)'
 
-const echrData = computed<EchrDocumentData | null>(() =>
-    props.document && isEchrDocument(props.document) ? props.document.data as EchrDocumentData : null
-)
-
-// ECHR's primary date is date_judgment - date_decision there maps to a different, often
-// absent field, so relying on date_decision alone (as Rechtspraak does) silently drops the
-// date for most real ECHR documents.
-const displayDate = computed<string | null>(() =>
-    echrData.value ? (echrData.value.date_judgment || echrData.value.date_decision || null) : (rsData.value?.date_decision || null)
-)
-
-// Prefer the authoritative edges array when provided (ECHR documents don't populate
-// cites/cited_by themselves), falling back to the document's own fields otherwise.
-const documentCites = computed<string[]>(() => {
-    if (!props.document) return []
-    if (props.edges) {
-        return props.edges.filter(e => e.source === props.document!.id).map(e => e.target)
+const activeNode = computed<GraphNode | null>(() => {
+    if (props.node) return props.node
+    if (props.document) {
+        return { id: String(props.document.id), data: (props.document.data ?? {}) as unknown as Record<string, unknown> }
     }
-    return (props.document.data as any)?.cites ?? []
+    return null
+})
+
+const activeConfig = computed<VisualizerConfig>(() => resolveVisualizerConfig(props.config) ?? caseLawConfig)
+const entityLabel = computed(() => activeConfig.value.labels?.entity ?? 'Document')
+const idLabel = computed(() => activeConfig.value.labels?.idLabel ?? 'ID')
+
+const data = computed<Record<string, unknown>>(() => activeNode.value?.data ?? {})
+const statistics = computed<Record<string, unknown> | undefined>(() => {
+    const value = data.value.statistics
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined
+})
+const summary = computed<string | undefined>(() => {
+    const field = activeConfig.value.summaryField
+    if (!field) return undefined
+    const value = data.value[field]
+    return value === undefined || value === null || value === '' ? undefined : String(value)
+})
+
+// Segments (provisions), as the IR adapter places them in node.data. The host
+// selects segments for annotation; the panel keeps its own toggle state and
+// reports every change through `segment-select`. When the host passes
+// `selectedSegmentIds`, its set is what the panel renders.
+const segments = computed<IRSegment[]>(() => {
+    const value = data.value.segments
+    if (!Array.isArray(value)) return []
+    const list = value as IRSegment[]
+    const selected = selectedSegmentIds.value
+    if (selected.size === 0) return list
+    // The picked provisions first, the rest after; each group keeps the
+    // document's own order, so a stable sort is enough.
+    return [...list].sort((a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)))
+})
+
+const localSelectedSegmentIds = ref<Set<string>>(new Set())
+
+const selectedSegmentIds = computed<Set<string>>(() =>
+    props.selectedSegmentIds ? new Set(props.selectedSegmentIds) : localSelectedSegmentIds.value,
+)
+
+watch(() => activeNode.value?.id, () => {
+    localSelectedSegmentIds.value = new Set()
+})
+
+function toggleSegment(segment: IRSegment) {
+    const next = new Set(selectedSegmentIds.value)
+    const selected = !next.has(segment.id)
+    if (selected) next.add(segment.id)
+    else next.delete(segment.id)
+    localSelectedSegmentIds.value = next
+    if (activeNode.value) {
+        emit('segment-select', { nodeId: activeNode.value.id, segmentId: segment.id, selected })
+    }
+}
+
+function detailValue(detail: DetailField): unknown {
+    if (!activeNode.value) return undefined
+    return detail.value ? detail.value(activeNode.value) : data.value[detail.field]
+}
+
+function hasDetail(detail: DetailField): boolean {
+    const value = detailValue(detail)
+    if (Array.isArray(value)) return value.length > 0
+    return value !== undefined && value !== null && value !== ''
+}
+
+const visibleDetails = computed(() => (activeConfig.value.details ?? []).filter(hasDetail))
+
+function detailDisplay(detail: DetailField): string {
+    const value = detailValue(detail)
+    if (Array.isArray(value)) return value.join(', ')
+    if (value === undefined || value === null || value === '') return ''
+    return String(value)
+}
+
+function detailHref(detail: DetailField): string | undefined {
+    const value = detailValue(detail)
+    return typeof value === 'string' && value ? value : undefined
+}
+
+// Citation lists prefer the authoritative graph/edges; otherwise fall back to
+// the node's own cites/cited_by (which ECHR nodes don't populate).
+const documentCites = computed<string[]>(() => {
+    const node = activeNode.value
+    if (!node) return []
+    if (props.graph) return props.graph.edges.filter((e) => e.source === node.id).map((e) => e.target)
+    if (props.edges) return props.edges.filter((e) => e.source === node.id).map((e) => e.target)
+    const cites = data.value.cites
+    return Array.isArray(cites) ? (cites as string[]) : []
 })
 
 const documentCitedBy = computed<string[]>(() => {
-    if (!props.document) return []
-    if (props.edges) {
-        return props.edges.filter(e => e.target === props.document!.id).map(e => e.source)
-    }
-    return (props.document.data as any)?.cited_by ?? []
+    const node = activeNode.value
+    if (!node) return []
+    if (props.graph) return props.graph.edges.filter((e) => e.target === node.id).map((e) => e.source)
+    if (props.edges) return props.edges.filter((e) => e.target === node.id).map((e) => e.source)
+    const citedBy = data.value.cited_by
+    return Array.isArray(citedBy) ? (citedBy as string[]) : []
 })
-
-const toArticleList = (value?: string | string[]): string[] => {
-    if (!value) return []
-    return Array.isArray(value) ? value : [value]
-}
-
-const buildHudocUrl = (itemid: string): string => {
-    const encodedItemid = encodeURIComponent(itemid)
-    return `https://hudoc.echr.coe.int/eng#%7B%22itemid%22:%5B%22${encodedItemid}%22%5D%7D`
-}
 
 const emit = defineEmits<{
     'update:visible': [value: boolean]
-    'citation-click': [ecli: string]
+    'citation-click': [id: string]
+    'segment-select': [payload: { nodeId: string; segmentId: string; selected: boolean }]
 }>()
 
 const isVisible = ref(props.visible || false)
@@ -242,13 +291,14 @@ watch(isVisible, (newVal) => {
     emit('update:visible', newVal)
 })
 
-const isEcliInDocs = (ecli: string): boolean => {
-    if (!props.docs || props.docs.length === 0) return false
-    return props.docs.some(doc => doc.id === ecli)
+const isNodeInGraph = (id: string): boolean => {
+    if (props.graph) return props.graph.nodes.some((n) => n.id === id)
+    if (props.docs && props.docs.length > 0) return props.docs.some((doc) => doc.id === id)
+    return false
 }
 
-const handleCitationClick = (ecli: string) => {
-    emit('citation-click', ecli)
+const handleCitationClick = (id: string) => {
+    emit('citation-click', id)
 }
 
 const formatStatKey = (key: string): string => {
@@ -275,17 +325,14 @@ const formatStatValue = (value: any): string => {
 </script>
 
 <style>
-/* Non-scoped to apply to PrimeVue Drawer which renders outside component tree */
+/* Non-scoped to apply to PrimeVue Dialog which renders outside component tree */
 .document-drawer {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
 }
 </style>
 
 <style scoped>
-.document-drawer {
-    width: 1000px;
-}
-
+/* The width is set inline (min(920px, 94vw)); the class carries the rest. */
 .drawer-header h2 {
     margin: 0;
     font-size: 16px;
@@ -343,19 +390,49 @@ const formatStatValue = (value: any): string => {
     font-size: 14px;
 }
 
-.tag-list {
+.segment-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
 }
 
-.tag {
-    background-color: #e0e7ff;
-    color: #4f46e5;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
+.segment-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.5;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.segment-item:hover {
+    background-color: #f8f9fa;
+}
+
+.segment-item.selected {
+    background-color: #e8f1fb;
+    border-color: #3498db;
+}
+
+.segment-check {
+    color: #adb5bd;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.segment-item.selected .segment-check {
+    color: #3498db;
+}
+
+.segment-text {
+    color: #374151;
 }
 
 .provision-list,
