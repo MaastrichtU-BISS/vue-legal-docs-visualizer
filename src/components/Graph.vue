@@ -848,7 +848,19 @@ const initGraph = async () => {
         style: {
           'background-color': 'data(color)', // Use color from node data
           'width': 'data(size)', // Use size from node data
-          'height': 'data(size)'
+          'height': 'data(size)',
+          // The config-driven label (config.nodes.label, falling back to the
+          // id) renders permanently under the node, ellipsized so long
+          // citations cannot sprawl. Collapsed clusters and expanded cluster
+          // parents override this below.
+          'label': 'data(label)',
+          'text-valign': 'bottom',
+          'text-halign': 'center',
+          'text-margin-y': 4,
+          'font-size': 10,
+          'color': '#495057',
+          'text-max-width': '120',
+          'text-wrap': 'ellipsis'
         }
       },
       {
@@ -918,7 +930,8 @@ const initGraph = async () => {
       },
       {
         // Collapsed cluster: a single sized/labeled placeholder node standing in for its
-        // hidden members. Class is added by cytoscape-expand-collapse itself.
+        // hidden members. Class is added by cytoscape-expand-collapse itself. Its label
+        // renders whole — no ellipsis — undoing the base node rule's truncation.
         selector: 'node.cy-expand-collapse-collapsed-node',
         style: {
           'background-opacity': 0.9,
@@ -932,7 +945,9 @@ const initGraph = async () => {
           'font-weight': 'bold',
           'color': '#ffffff',
           'text-outline-width': 2,
-          'text-outline-color': 'data(color)'
+          'text-outline-color': 'data(color)',
+          'text-max-width': '0',
+          'text-wrap': 'none'
         }
       },
       {
