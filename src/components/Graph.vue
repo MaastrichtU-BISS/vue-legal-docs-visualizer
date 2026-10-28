@@ -850,7 +850,7 @@ const initGraph = async () => {
           'label': 'data(label)',
           'text-valign': 'bottom',
           'text-halign': 'center',
-          'text-margin-y': 4,
+          'text-margin-y': '4',
           'font-size': 10,
           'color': '#495057',
           'text-max-width': 120,
