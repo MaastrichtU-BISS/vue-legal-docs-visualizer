@@ -1,5 +1,11 @@
 <template>
-    <Dialog v-model:visible="isVisible" modal maximizable class="document-drawer" :style="{ width: 'min(920px, 94vw)' }">
+    <component
+        :is="overlayComponent"
+        v-model:visible="isVisible"
+        class="document-drawer"
+        :style="{ width: overlayWidth }"
+        v-bind="overlayProps"
+    >
         <template #header>
             <div class="drawer-header">
                 <h2>{{ entityLabel }} Details</h2>
@@ -107,12 +113,13 @@
                 </ul>
             </div>
         </div>
-    </Dialog>
+    </component>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import Dialog from 'primevue/dialog'
+import Drawer from 'primevue/drawer'
 import type { LegalDocument, LegalEdge } from './types'
 import {
   caseLawConfig,
@@ -148,6 +155,20 @@ export interface Props {
 }
 
 const props = defineProps<Props>()
+
+// The presentation is a build-time decision, not a runtime prop: the
+// consuming app's Vite `define` replaces the constant, the bundler folds
+// the branch away, and what ships cannot be switched at runtime.
+const DETAILS_PRESENTATION: 'drawer' | 'modal' =
+    typeof __LEGAL_VISUALIZER_DETAILS_PRESENTATION__ !== 'undefined'
+        ? __LEGAL_VISUALIZER_DETAILS_PRESENTATION__
+        : 'modal'
+const overlayComponent = DETAILS_PRESENTATION === 'drawer' ? Drawer : Dialog
+const overlayProps =
+    DETAILS_PRESENTATION === 'drawer'
+        ? { position: 'right', modal: false }
+        : { modal: true, maximizable: true }
+const overlayWidth = DETAILS_PRESENTATION === 'drawer' ? '400px' : 'min(920px, 94vw)'
 
 const activeNode = computed<GraphNode | null>(() => {
     if (props.node) return props.node
