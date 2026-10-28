@@ -90,3 +90,15 @@ export function sortedSegments(segments: IRSegment[] = []): IRSegment[] {
     })
     .map(({ segment }) => segment)
 }
+
+/** One 0-based page of the (already sorted) segment list. A page size below
+ * one is treated as one, so a degenerate config still shows something. */
+export function segmentPage(segments: IRSegment[] = [], page = 0, pageSize = 20): IRSegment[] {
+  const size = Math.max(pageSize, 1)
+  return segments.slice(page * size, (page + 1) * size)
+}
+
+/** How many pages a list needs; never zero, so an empty list still shows one. */
+export function pageCount(segmentCount = 0, pageSize = 20): number {
+  return Math.max(1, Math.ceil(segmentCount / Math.max(pageSize, 1)))
+}

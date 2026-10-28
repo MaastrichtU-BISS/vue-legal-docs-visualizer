@@ -84,7 +84,7 @@
 
                 <div v-if="tab === 'provisions'" class="provision-list">
                     <label
-                        v-for="segment in openSegments"
+                        v-for="segment in shownSegments"
                         :key="segment.id"
                         class="prov-card"
                         :class="{ selected: isSelected(segment.id) }"
@@ -113,6 +113,14 @@
                         </span>
                     </label>
                     <p v-if="openSegments.length === 0" class="results-empty">This result carries no provisions.</p>
+                </div>
+
+                <!-- Pager for the opt-in paginated mode, pinned under the
+                     scrolling list; hidden until there is something to page. -->
+                <div v-if="tab === 'provisions' && paginated && pages > 1" class="provision-pager">
+                    <button type="button" :disabled="page === 0" @click="page--">‹ Prev</button>
+                    <span class="pager-status">Page {{ page + 1 }} of {{ pages }} · {{ openSegments.length }} provisions</span>
+                    <button type="button" :disabled="page >= pages - 1" @click="page++">Next ›</button>
                 </div>
 
                 <div v-else class="document-view">
@@ -151,8 +159,10 @@ import { splitHighlights, type HighlightedChunk } from '../table'
 import {
   formatScore,
   isBelowThreshold,
+  pageCount,
   scoreColor,
   scoreWidth,
+  segmentPage,
   sortedSegments,
   termRanges,
 } from '../ir-results'
@@ -256,9 +266,22 @@ const openSegments = computed<IRSegment[]>(() => {
   return sortedSegments(segments)
 })
 
+// --- provision pagination (opt-in) ----------------------------------------------
+
+const paginated = computed(() => effectiveConfig.value.segmentOverflow === 'paginate')
+const pageSize = computed(() => Math.max(effectiveConfig.value.segmentsPerPage ?? 20, 1))
+const pages = computed(() => pageCount(openSegments.value.length, pageSize.value))
+const page = ref(0)
+
+/** The segments on screen: the whole sorted list, or the current page. */
+const shownSegments = computed<IRSegment[]>(() =>
+  paginated.value ? segmentPage(openSegments.value, page.value, pageSize.value) : openSegments.value,
+)
+
 function open(id: string) {
   openId.value = id
   tab.value = 'provisions'
+  page.value = 0
   docDetail.value = undefined
   docError.value = ''
 }
@@ -566,6 +589,38 @@ mark.ir-highlight {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.provision-pager {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid #dee2e6;
+}
+
+.provision-pager button {
+  border: 1px solid #dee2e6;
+  background: white;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.provision-pager button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pager-status {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .prov-card {
