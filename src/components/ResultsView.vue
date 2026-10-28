@@ -64,8 +64,9 @@
                     </div>
                 </header>
 
-                <div class="viewer-tabs">
+                <div v-if="tabs.length > 0" class="viewer-tabs">
                     <button
+                        v-if="tabs.includes('provisions')"
                         type="button"
                         :class="{ active: tab === 'provisions' }"
                         @click="tab = 'provisions'"
@@ -73,7 +74,7 @@
                         Provisions ({{ openSegments.length }})
                     </button>
                     <button
-                        v-if="loadDocument"
+                        v-if="tabs.includes('document')"
                         type="button"
                         :class="{ active: tab === 'document' }"
                         @click="showDocument"
@@ -82,7 +83,7 @@
                     </button>
                 </div>
 
-                <div v-if="tab === 'provisions'" class="provision-list">
+                <div v-if="tab === 'provisions' && tabs.includes('provisions')" class="provision-list">
                     <label
                         v-for="segment in openSegments"
                         :key="segment.id"
@@ -115,7 +116,7 @@
                     <p v-if="openSegments.length === 0" class="results-empty">This result carries no provisions.</p>
                 </div>
 
-                <div v-else class="document-view">
+                <div v-else-if="tabs.includes('document')" class="document-view">
                     <p v-if="docLoading" class="doc-note">Loading…</p>
                     <p v-else-if="docError" class="doc-error" data-test="document-error">{{ docError }}</p>
                     <template v-else-if="docDetail">
@@ -155,6 +156,7 @@ import {
   scoreWidth,
   sortedSegments,
   termRanges,
+  visibleTabs,
 } from '../ir-results'
 
 export interface Props {
@@ -256,9 +258,15 @@ const openSegments = computed<IRSegment[]>(() => {
   return sortedSegments(segments)
 })
 
+/** The tabs the open result actually offers — a segment-less result never
+ * offers the provisions tab, and the document tab needs a host loader. */
+const tabs = computed(() => visibleTabs(openSegments.value.length, !!props.loadDocument))
+
 function open(id: string) {
   openId.value = id
-  tab.value = 'provisions'
+  // A result without segments lands on its document tab when it has one;
+  // with neither, the tab bar hides and only the header/meta show.
+  tab.value = openSegments.value.length > 0 ? 'provisions' : 'document'
   docDetail.value = undefined
   docError.value = ''
 }
