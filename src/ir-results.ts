@@ -90,3 +90,18 @@ export function sortedSegments(segments: IRSegment[] = []): IRSegment[] {
     })
     .map(({ segment }) => segment)
 }
+
+/**
+ * The tabs a result offers in the results view: provisions only when it has
+ * segments — a result without them would only ever show an empty list — and
+ * the full document only when the host can load one.
+ */
+export function visibleTabs(
+  segmentCount: number,
+  hasDocumentLoader: boolean,
+): ('provisions' | 'document')[] {
+  const tabs: ('provisions' | 'document')[] = []
+  if (segmentCount > 0) tabs.push('provisions')
+  if (hasDocumentLoader) tabs.push('document')
+  return tabs
+}

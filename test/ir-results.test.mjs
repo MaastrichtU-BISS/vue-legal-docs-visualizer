@@ -26,6 +26,7 @@ const {
   termRanges,
   queryTerms,
   sortedSegments,
+  visibleTabs,
 } = mod
 
 test('score color bands: green above .5, ocean above .3, amber below', () => {
@@ -88,4 +89,16 @@ test('queryTerms keeps words of two characters or more, minus function words', (
   assert.deepEqual(queryTerms('data retention of AI'), ['data', 'retention', 'AI'])
   assert.deepEqual(queryTerms('the overeenkomst is gesloten'), ['overeenkomst', 'gesloten'])
   assert.deepEqual(queryTerms('   '), [])
+})
+
+// --- tab visibility (issue #14) -------------------------------------------------
+
+test('visibleTabs: a segmented result offers provisions (and the document tab with a loader)', () => {
+  assert.deepEqual(visibleTabs(3, true), ['provisions', 'document'])
+  assert.deepEqual(visibleTabs(1, false), ['provisions'])
+})
+
+test('visibleTabs: a segment-less result never offers the provisions tab', () => {
+  assert.deepEqual(visibleTabs(0, true), ['document'])
+  assert.deepEqual(visibleTabs(0, false), [])
 })
