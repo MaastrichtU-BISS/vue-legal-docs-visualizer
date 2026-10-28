@@ -842,7 +842,19 @@ const initGraph = async () => {
         style: {
           'background-color': 'data(color)', // Use color from node data
           'width': 'data(size)', // Use size from node data
-          'height': 'data(size)'
+          'height': 'data(size)',
+          // The config-driven label (config.nodes.label, falling back to the
+          // id) renders permanently under the node, ellipsized so long
+          // citations cannot sprawl. Collapsed clusters and expanded cluster
+          // parents override this below.
+          'label': 'data(label)',
+          'text-valign': 'bottom',
+          'text-halign': 'center',
+          'text-margin-y': 4,
+          'font-size': 10,
+          'color': '#495057',
+          'text-max-width': 120,
+          'text-wrap': 'ellipsis'
         }
       },
       {
