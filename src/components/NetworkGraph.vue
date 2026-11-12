@@ -1,7 +1,7 @@
 <template>
   <div class="network-graph">
     <GraphSearch v-model="query" @search="applySearch" />
-    <GraphControls @zoom-in="zoomIn" @zoom-out="zoomOut" @fit="fitToView" />
+    <GraphControls :downloadable="downloadable" @zoom-in="zoomIn" @zoom-out="zoomOut" @fit="fitToView" @download="downloadImage" />
 
     <div ref="canvas" class="network-graph__canvas"></div>
 
@@ -25,6 +25,7 @@ import { buildElements, nodeMatches } from '../graph/elements'
 import { registerFcose, registerPopper } from '../graph/extensions'
 import { createNodeTooltip } from '../graph/nodeTooltip'
 import * as viewport from '../graph/viewport'
+import { downloadGraphImage } from '../graph/exportImage'
 import GraphSearch from './GraphSearch.vue'
 import GraphControls from './GraphControls.vue'
 import GraphTooltip from './GraphTooltip.vue'
@@ -45,6 +46,10 @@ export interface Props {
   currentId?: string
   /** Shown when there are no nodes. */
   emptyText?: string
+  /** Offer a button that downloads the graph as a PNG image. Off by default. */
+  downloadable?: boolean
+  /** The downloaded file's name (`.png` is added). Defaults to `graph`. */
+  imageFilename?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -76,6 +81,7 @@ const tooltip = createNodeTooltip({
 const zoomIn = () => viewport.zoomIn(cy)
 const zoomOut = () => viewport.zoomOut(cy)
 const fitToView = () => viewport.fitToView(cy)
+const downloadImage = () => downloadGraphImage(cy, props.imageFilename)
 
 const nodeById = () => new Map(props.nodes.map((n) => [n.id, n]))
 

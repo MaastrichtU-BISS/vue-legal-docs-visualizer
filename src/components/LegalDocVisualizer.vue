@@ -24,6 +24,7 @@
                     ref="currentComponentRef"
                     :docs="docs"
                     :edges="edges"
+                    v-bind="currentMode === VisualizationMode.GRAPH ? graphOptions : {}"
                     @doc-click="handleDocClick"
                     @cluster-click="handleClusterClick"
                     class="visualization-container"
@@ -52,9 +53,16 @@ import 'primeicons/primeicons.css'
 export interface Props {
     docs?: LegalDocument[]
     edges?: LegalEdge[]
+    /** Offer a "download as image" button on the graph view. Off by default. */
+    downloadable?: boolean
+    /** The downloaded image's file name (`.png` is added). Defaults to `graph`. */
+    imageFilename?: string
 }
 
 const props = defineProps<Props>();
+
+// What only the graph view takes (the table has no use for it).
+const graphOptions = computed(() => ({ downloadable: props.downloadable, imageFilename: props.imageFilename }))
 
 const selectedDocument = ref<LegalDocument | null>(null)
 const drawerVisible = ref(false)

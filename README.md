@@ -109,6 +109,8 @@ definition, and edges with the same ends are merged (their labels joined).
 | `edges` | `NetworkEdge[]` | Default `[]`. |
 | `currentId` | `string?` | The node in focus, drawn with a thick border. |
 | `emptyText` | `string?` | Shown when there are no nodes. |
+| `downloadable` | `boolean?` | Show a **download as image** button. Off by default; see [Downloading an image](#downloading-an-image). |
+| `imageFilename` | `string?` | The downloaded file's name (`.png` is added). Default `graph`. |
 
 | Event / slot / method | |
 |---|---|
@@ -122,6 +124,27 @@ leaves out what is specific to citation networks: the table view, clusters,
 multi-select, statistics and the document details panel. It needs the PrimeVue
 setup the rest of the package needs (installing the plugin does it), and a
 container with a height, since the graph fills its parent.
+
+### Downloading an image
+
+Both graphs can offer a button that saves the graph as a picture. It is **off
+unless the host turns it on**, so a host that does not want it never shows it:
+
+```vue
+<NetworkGraph :nodes="nodes" :edges="edges" downloadable image-filename="document-relations" />
+<LegalDocVisualizer :docs="docs" :edges="edges" downloadable image-filename="citations" />
+```
+
+| Prop | On | |
+|---|---|---|
+| `downloadable` | `NetworkGraph`, `LegalDocVisualizer` (its graph view; the table has no image) | Show the button (the download icon beside zoom and fit). Default `false`. |
+| `imageFilename` | the same | The file's name; `.png` is added and characters file systems reject are replaced. Default `graph`. |
+
+The picture is a PNG at twice the on-screen size on a white background (capped
+at 8000 pixels a side, since a larger canvas comes out blank). It shows the
+**whole graph**, not just the part zoomed into, without the search box and
+controls. Nodes hidden by a search, or inside collapsed clusters, are left out
+because they are not drawn.
 
 ### How the two graphs fit together
 
@@ -140,9 +163,10 @@ and both use it:
 | Shared piece | What it is |
 |---|---|
 | `components/GraphSearch.vue` | the search box floating over the top-left corner (holds the text; what matches is the graph's business) |
-| `components/GraphControls.vue` | the zoom / fit buttons over the top-right corner, with a slot for extra buttons (the legal graph adds expand/collapse clusters) |
+| `components/GraphControls.vue` | the zoom / fit buttons over the top-right corner, the optional download button, and a slot for extra buttons (the legal graph adds expand/collapse clusters) |
 | `components/GraphTooltip.vue` + `graph/nodeTooltip.ts` | the tooltip's box and arrow, and placing it over a hovered node (delay, staying inside the graph, following pan and zoom). The content is each graph's own, passed as a slot |
 | `graph/viewport.ts` | what zoom in / out / fit do |
+| `graph/exportImage.ts` | saving the graph as a PNG (and the file name rules) |
 | `graph/extensions.ts` | loading the cytoscape extensions once, on demand |
 
 Only what really differs stays in each component: building cytoscape elements
@@ -188,6 +212,9 @@ from the shared pieces above.
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
 | `docs` | `LegalDocument[]` | No | Array of legal documents, shaped by `legal-docs-types` |
+| `edges` | `LegalEdge[]` | No | The citations between them; reconstructed from each document's `cites` when omitted |
+| `downloadable` | `boolean` | No | Show a "download as image" button on the graph view (default `false`; see [Downloading an image](#downloading-an-image)) |
+| `imageFilename` | `string` | No | The downloaded image's file name (default `graph`) |
 
 ## Development
 

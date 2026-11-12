@@ -5,15 +5,27 @@
     <Button icon="pi pi-arrows-alt" severity="secondary" size="small" rounded title="Fit to View" aria-label="Fit to View" @click="emit('fit')" />
     <!-- Buttons only some graphs have (such as expanding clusters). -->
     <slot />
+    <Button
+      v-if="downloadable"
+      icon="pi pi-download"
+      severity="secondary"
+      size="small"
+      rounded
+      title="Download as image"
+      aria-label="Download as image"
+      @click="emit('download')"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
 import Button from 'primevue/button'
 
-// The zoom / fit buttons floating over a graph's top-right corner. They only
-// announce what was asked; graph/viewport.ts does it.
-const emit = defineEmits<{ zoomIn: []; zoomOut: []; fit: [] }>()
+// The buttons floating over a graph's top-right corner: zoom, fit and, when the
+// host asks for it, download as an image. They only announce what was asked;
+// graph/viewport.ts and graph/exportImage.ts do it.
+defineProps<{ downloadable?: boolean }>()
+const emit = defineEmits<{ zoomIn: []; zoomOut: []; fit: []; download: [] }>()
 </script>
 
 <style scoped>

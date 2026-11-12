@@ -8,7 +8,7 @@
       </p>
     </div>
     <GraphSearch v-model="searchQuery" @search="applyFilters" />
-    <GraphControls @zoom-in="zoomIn" @zoom-out="zoomOut" @fit="fitToView">
+    <GraphControls :downloadable="downloadable" @zoom-in="zoomIn" @zoom-out="zoomOut" @fit="fitToView" @download="downloadImage">
       <Button
         :icon="hasCollapsedClusters ? 'pi pi-plus-circle' : 'pi pi-minus-circle'"
         severity="secondary"
@@ -79,6 +79,7 @@ import type { LegalEdge } from './types'
 import { registerFcose, registerPopper } from '../graph/extensions'
 import { createNodeTooltip } from '../graph/nodeTooltip'
 import * as viewport from '../graph/viewport'
+import { downloadGraphImage } from '../graph/exportImage'
 import GraphSearch from './GraphSearch.vue'
 import GraphControls from './GraphControls.vue'
 import GraphTooltip from './GraphTooltip.vue'
@@ -99,6 +100,10 @@ const registerExpandCollapse = async () => {
 export interface Props {
   docs?: any[]
   edges?: LegalEdge[]
+  /** Offer a button that downloads the graph as a PNG image. Off by default. */
+  downloadable?: boolean
+  /** The downloaded file's name (`.png` is added). Defaults to `graph`. */
+  imageFilename?: string
 }
 
 const props = defineProps<Props>()
@@ -205,6 +210,7 @@ const applyFilters = () => {
 const zoomIn = () => viewport.zoomIn(cy)
 const zoomOut = () => viewport.zoomOut(cy)
 const fitToView = () => viewport.fitToView(cy)
+const downloadImage = () => downloadGraphImage(cy, props.imageFilename)
 
 const hasCollapsedClusters = ref(false)
 
