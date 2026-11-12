@@ -180,7 +180,7 @@ const initGraph = async () => {
           'text-margin-y': 4,
           color: '#2c3e50',
           'text-wrap': 'ellipsis',
-          'text-max-width': '110px'
+          'text-max-width': '150px'
         }
       },
       {
@@ -215,7 +215,8 @@ const initGraph = async () => {
     randomize: true,
     animate: false,
     fit: true,
-    padding: 40,
+    // Room for the search box and the controls floating over the corners.
+    padding: 64,
     tile: true,
     nodeRepulsion: 6500,
     idealEdgeLength: 120,
