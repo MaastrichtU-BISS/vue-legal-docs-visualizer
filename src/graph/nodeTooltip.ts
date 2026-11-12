@@ -61,5 +61,13 @@ export function createNodeTooltip({ element, boundary, cy, delay = 300 }: NodeTo
     cy()?.off('pan zoom resize', update)
   }
 
-  return { show, hide }
+  /**
+   * Hides the tooltip as soon as a node is picked up to be dragged: it would
+   * otherwise stay behind, pointing at where the node was.
+   */
+  const hideWhileDragging = (graph: Core) => {
+    graph.on('grab', 'node', hide)
+  }
+
+  return { show, hide, hideWhileDragging }
 }

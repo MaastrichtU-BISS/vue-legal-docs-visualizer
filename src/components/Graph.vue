@@ -900,6 +900,8 @@ const initGraph = async () => {
     updateSelectionCount()
   })
 
+  nodeTooltip.hideWhileDragging(cy)
+
   // Add hover event listeners for tooltip
   cy.on('mouseover', 'node', (event) => {
     const node = event.target

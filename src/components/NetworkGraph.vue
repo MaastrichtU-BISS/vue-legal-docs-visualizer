@@ -182,6 +182,7 @@ const initGraph = async () => {
 
   cy.on('tap', 'node', (event) => emit('nodeClick', event.target.id()))
 
+  tooltip.hideWhileDragging(cy)
   cy.on('mouseover', 'node', (event) => {
     const source = nodeById().get(event.target.id())
     if (canvas.value) canvas.value.style.cursor = 'pointer'
