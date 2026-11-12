@@ -8,5 +8,5 @@
     "outDir": "./dist"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
-  "exclude": ["src/dev/**/*", "node_modules"]
+  "exclude": ["src/dev/**/*", "src/**/*.test.ts", "node_modules"]
 }
