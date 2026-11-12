@@ -102,41 +102,13 @@
 <script lang="ts" setup>
 import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
 import cytoscape, { Core } from 'cytoscape'
-import { createPopper } from '@popperjs/core'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import InputSwitch from 'primevue/inputswitch'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import type { LegalEdge } from './types'
-
-// Dynamically import and register cytoscape-popper
-let popperRegistered = false
-
-const registerPopper = async () => {
-  if (!popperRegistered) {
-    const cytoscapePopper = await import('cytoscape-popper')
-    const extension = cytoscapePopper.default
-
-    // Pass the createPopper factory to the extension
-    cytoscape.use(extension(createPopper) as any)
-
-    popperRegistered = true
-  }
-}
-
-// Dynamically import and register cytoscape-fcose - a much faster (near-linear vs the core
-// cose layout's O(n^2) per iteration) and overlap-aware layout, needed once graphs reach the
-// hundreds of nodes.
-let fcoseRegistered = false
-
-const registerFcose = async () => {
-  if (!fcoseRegistered) {
-    const cytoscapeFcose = await import('cytoscape-fcose')
-    cytoscape.use(cytoscapeFcose.default)
-    fcoseRegistered = true
-  }
-}
+import { registerFcose, registerPopper } from '../graph/extensions'
 
 // Dynamically import and register cytoscape-expand-collapse - lets whole clusters be
 // represented as a single collapsible node, which is what actually keeps large graphs
