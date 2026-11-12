@@ -7,36 +7,8 @@
         {{ layoutInfo.iterations < 100 ? 'Optimizing layout...' : layoutInfo.iterations < 500 ? 'Fast layout mode' : 'High quality layout' }}
       </p>
     </div>
-    <div class="filter-bar">
-      <IconField>
-        <InputIcon>
-          <i class="pi pi-search" />
-        </InputIcon>
-        <InputText v-model="searchQuery" placeholder="Search..." @input="applyFilters" :style="'padding-right: 0;'" />
-      </IconField>
-    </div>
-    <div class="cy-controls">
-      <Button 
-        icon="pi pi-minus" 
-        severity="secondary" 
-        size="small"
-        rounded 
-        @click="zoomOut"
-        v-tooltip="'Zoom Out'" />
-      <Button 
-        icon="pi pi-plus" 
-        severity="secondary" 
-        size="small" 
-        rounded 
-        @click="zoomIn"
-        v-tooltip="'Zoom In'" />
-      <Button
-        icon="pi pi-arrows-alt"
-        severity="secondary"
-        size="small"
-        rounded
-        @click="fitToView"
-        v-tooltip="'Fit to View'" />
+    <GraphSearch v-model="searchQuery" @search="applyFilters" />
+    <GraphControls @zoom-in="zoomIn" @zoom-out="zoomOut" @fit="fitToView">
       <Button
         :icon="hasCollapsedClusters ? 'pi pi-plus-circle' : 'pi pi-minus-circle'"
         severity="secondary"
@@ -44,17 +16,16 @@
         rounded
         @click="toggleAllClusters"
         v-tooltip="hasCollapsedClusters ? 'Expand All Clusters' : 'Collapse All Clusters'" />
-    </div>
+    </GraphControls>
     <div ref="cyContainer" class="cy-container"></div>
-    <div ref="tooltip" class="graph-tooltip">
-      <div class="graph-tooltip-arrow"></div>
+    <GraphTooltip ref="tooltipBox">
       <div class="tooltip-ecli">{{ tooltipContent.ecli }}</div>
       <div v-if="tooltipContent.title" class="tooltip-title">{{ tooltipContent.title }}</div>
       <ul v-if="tooltipContent.provisions.length > 0" class="tooltip-provisions">
         <li v-for="(provision, index) in tooltipContent.provisions" :key="index">{{ provision }}</li>
       </ul>
       <div class="tooltip-summary">{{ tooltipContent.summary }}</div>
-    </div>
+    </GraphTooltip>
     <div
       ref="clusterTooltip"
       class="cluster-tooltip"
@@ -102,13 +73,15 @@
 <script lang="ts" setup>
 import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
 import cytoscape, { Core } from 'cytoscape'
-import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import InputSwitch from 'primevue/inputswitch'
-import IconField from 'primevue/iconfield'
-import InputIcon from 'primevue/inputicon'
 import type { LegalEdge } from './types'
 import { registerFcose, registerPopper } from '../graph/extensions'
+import { createNodeTooltip } from '../graph/nodeTooltip'
+import * as viewport from '../graph/viewport'
+import GraphSearch from './GraphSearch.vue'
+import GraphControls from './GraphControls.vue'
+import GraphTooltip from './GraphTooltip.vue'
 
 // Dynamically import and register cytoscape-expand-collapse - lets whole clusters be
 // represented as a single collapsible node, which is what actually keeps large graphs
@@ -228,21 +201,10 @@ const applyFilters = () => {
   })
 }
 
-// Cytoscape controls
-const zoomIn = () => {
-  if (!cy) return
-  cy.zoom(cy.zoom() * 1.2)
-}
-
-const zoomOut = () => {
-  if (!cy) return
-  cy.zoom(cy.zoom() / 1.2)
-}
-
-const fitToView = () => {
-  if (!cy) return
-  cy.fit()
-}
+// Cytoscape controls (what they do is shared with the other graphs: graph/viewport)
+const zoomIn = () => viewport.zoomIn(cy)
+const zoomOut = () => viewport.zoomOut(cy)
+const fitToView = () => viewport.fitToView(cy)
 
 const hasCollapsedClusters = ref(false)
 
@@ -289,11 +251,16 @@ const updateSelectionCount = () => {
 }
 
 const cyContainer = ref<HTMLElement | null>(null)
-const tooltip = ref<HTMLElement | null>(null)
+const tooltipBox = ref<InstanceType<typeof GraphTooltip> | null>(null)
 const tooltipContent = ref({ ecli: '', title: '', summary: '', provisions: [] as string[] })
 let cy: Core | null = null
-let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
-let currentPopper: any = null
+// Placing the hover tooltip over a node is shared with the other graphs (graph/nodeTooltip);
+// what it says (tooltipContent) is specific to legal documents.
+const nodeTooltip = createNodeTooltip({
+  element: () => tooltipBox.value?.root ?? null,
+  boundary: () => cyContainer.value,
+  cy: () => cy
+})
 
 // Cluster hover popup (Expand/Collapse + Summary) - replaces cytoscape-expand-collapse's own
 // +/- cue, which draws itself on a canvas overlay using its own bounding-box/coordinate math
@@ -949,11 +916,6 @@ const initGraph = async () => {
       node.style('opacity', 0.7)
     }
 
-    // Clear any existing timeout
-    if (tooltipTimeout) {
-      clearTimeout(tooltipTimeout)
-    }
-
     const isEchr = docData.data?.dataset === 'ECHR'
     tooltipContent.value = {
       ecli: docData.id || '',
@@ -962,58 +924,7 @@ const initGraph = async () => {
       provisions: docData.data?.legal_provisions || []
     }
 
-    // Show tooltip after a delay
-    tooltipTimeout = setTimeout(() => {
-      if (tooltip.value && node) {
-        // Create popper instance for this node
-        currentPopper = (node as any).popper({
-          content: tooltip.value,
-          popper: {
-            placement: 'top',
-            modifiers: [
-              {
-                name: 'arrow',
-                options: {
-                  element: tooltip.value?.querySelector('.graph-tooltip-arrow')
-                }
-              },
-              {
-                name: 'offset',
-                options: {
-                  offset: [0, 12]
-                }
-              },
-              {
-                name: 'preventOverflow',
-                options: {
-                  boundary: cyContainer.value,
-                  padding: 10
-                }
-              },
-              {
-                name: 'flip',
-                options: {
-                  fallbackPlacements: ['bottom', 'left', 'right']
-                }
-              }
-            ]
-          }
-        })
-
-        tooltip.value.style.display = 'block'
-        tooltip.value.style.opacity = '1'
-
-        // Update popper position
-        const update = () => {
-          if (currentPopper && currentPopper.update) {
-            currentPopper.update()
-          }
-        }
-
-        // Update on zoom/pan
-        cy?.on('pan zoom resize', update)
-      }
-    }, 300)
+    nodeTooltip.show(node)
   })
 
   cy.on('mouseout', 'node', (event) => {
@@ -1031,27 +942,7 @@ const initGraph = async () => {
       node.style('opacity', 1)
     }
 
-    // Clear timeout and hide tooltip
-    if (tooltipTimeout) {
-      clearTimeout(tooltipTimeout)
-      tooltipTimeout = null
-    }
-
-    if (tooltip.value) {
-      tooltip.value.style.display = 'none'
-      tooltip.value.style.opacity = '0'
-    }
-
-    // Destroy popper instance
-    if (currentPopper) {
-      if (currentPopper.destroy) {
-        currentPopper.destroy()
-      }
-      currentPopper = null
-    }
-
-    // Remove event listeners
-    cy?.off('pan zoom resize')
+    nodeTooltip.hide()
   })
 
   // Graph rendering complete
@@ -1059,16 +950,7 @@ const initGraph = async () => {
 }
 
 const destroyGraph = () => {
-  if (tooltipTimeout) {
-    clearTimeout(tooltipTimeout)
-    tooltipTimeout = null
-  }
-  if (currentPopper) {
-    if (currentPopper.destroy) {
-      currentPopper.destroy()
-    }
-    currentPopper = null
-  }
+  nodeTooltip.hide()
   hideClusterTooltip()
   expandCollapseApi = null
   if (cy) {
@@ -1124,24 +1006,6 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-.filter-bar {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  background-color: rgba(255, 255, 255, 0.95);
-  padding: 6px 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border: 1px solid #dee2e6;
-}
-
-.filter-bar :deep(.p-iconfield) {
-  width: 220px;
-}
-
 .cy-container {
   flex: 1;
   width: 100%;
@@ -1163,49 +1027,6 @@ onBeforeUnmount(() => {
    meant for) the surrounding UI controls. */
 :deep(.expand-collapse-canvas) {
   pointer-events: none;
-}
-
-.graph-tooltip {
-  display: none;
-  background-color: white;
-  color: #2c3e50;
-  padding: 8px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  max-width: 300px;
-  pointer-events: none;
-  z-index: 1000;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border: 1px solid #dee2e6;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  position: relative;
-  overflow: visible;
-}
-
-.graph-tooltip[data-show] {
-  display: block;
-}
-
-.graph-tooltip-arrow {
-  position: absolute;
-  width: 0;
-  height: 0;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid white;
-}
-
-.graph-tooltip[data-popper-placement^='bottom'] .graph-tooltip-arrow {
-  top: -8px;
-  bottom: auto;
-  border-top-color: transparent;
-  border-bottom: 8px solid white;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
 }
 
 .cluster-tooltip {
@@ -1264,28 +1085,6 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 6;
   line-clamp: 6;
   -webkit-box-orient: vertical;
-}
-
-.cy-controls {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  gap: 4px;
-  background-color: rgba(255, 255, 255, 0.95);
-  padding: 6px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border: 1px solid #dee2e6;
-  z-index: 10;
-}
-
-.cy-controls :deep(.p-button) {
-  padding: 0.15rem 0.15rem;
-}
-
-.cy-controls :deep(.p-button-icon) {
-  font-size: 10px;
 }
 
 .graph-loading {

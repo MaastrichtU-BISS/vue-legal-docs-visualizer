@@ -1,51 +1,42 @@
 <template>
   <div class="network-graph">
-    <div class="network-graph__search">
-      <IconField>
-        <InputIcon>
-          <i class="pi pi-search" />
-        </InputIcon>
-        <InputText v-model="query" placeholder="Search..." @input="applySearch" :style="'padding-right: 0;'" />
-      </IconField>
-    </div>
-
-    <div class="network-graph__controls">
-      <Button icon="pi pi-minus" severity="secondary" size="small" rounded title="Zoom Out" aria-label="Zoom Out" @click="zoomOut" />
-      <Button icon="pi pi-plus" severity="secondary" size="small" rounded title="Zoom In" aria-label="Zoom In" @click="zoomIn" />
-      <Button icon="pi pi-arrows-alt" severity="secondary" size="small" rounded title="Fit to View" aria-label="Fit to View" @click="fitToView" />
-    </div>
+    <GraphSearch v-model="query" @search="applySearch" />
+    <GraphControls @zoom-in="zoomIn" @zoom-out="zoomOut" @fit="fitToView" />
 
     <div ref="canvas" class="network-graph__canvas"></div>
 
     <div v-if="!nodes.length" class="network-graph__empty">{{ emptyText }}</div>
 
-    <div ref="tooltip" class="network-graph__tooltip">
-      <div class="network-graph__tooltip-arrow"></div>
+    <GraphTooltip ref="tooltipBox">
       <!-- What a hovered node shows. Replace it with the `tooltip` slot. -->
       <slot name="tooltip" :node="hovered">
         <div v-if="hovered?.title" class="network-graph__tooltip-title">{{ hovered.title }}</div>
         <div v-if="hovered?.description" class="network-graph__tooltip-body">{{ hovered.description }}</div>
       </slot>
-    </div>
+    </GraphTooltip>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import cytoscape, { type Core } from 'cytoscape'
-import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
-import IconField from 'primevue/iconfield'
-import InputIcon from 'primevue/inputicon'
 import type { NetworkEdge, NetworkNode } from '../graph/types'
 import { buildElements, nodeMatches } from '../graph/elements'
 import { registerFcose, registerPopper } from '../graph/extensions'
+import { createNodeTooltip } from '../graph/nodeTooltip'
+import * as viewport from '../graph/viewport'
+import GraphSearch from './GraphSearch.vue'
+import GraphControls from './GraphControls.vue'
+import GraphTooltip from './GraphTooltip.vue'
 
 // A generic network graph: plain nodes and edges in, an interactive graph out
 // (search, zoom, fit, hover tooltips, click on a node). It knows nothing about
 // legal documents; the table view, clusters and selection of the
-// LegalDocVisualizer are not part of it. Use it where a host has a modest
-// number of things pointing at each other and wants to see them as a picture.
+// LegalDocVisualizer are not part of it. The search box, zoom controls, tooltip
+// and extension loading are the same ones the LegalDocVisualizer's graph uses
+// (GraphSearch, GraphControls, GraphTooltip, graph/*): only what is specific to
+// this input lives here. Use it where a host has a modest number of things
+// pointing at each other and wants to see them as a picture.
 
 export interface Props {
   nodes: NetworkNode[]
@@ -66,21 +57,27 @@ const emit = defineEmits<{
   nodeClick: [id: string]
 }>()
 
+const slots = defineSlots<{ tooltip?: (props: { node: NetworkNode | null }) => unknown }>()
+
 const canvas = ref<HTMLElement | null>(null)
-const tooltip = ref<HTMLElement | null>(null)
+const tooltipBox = ref<InstanceType<typeof GraphTooltip> | null>(null)
 const query = ref('')
 const hovered = ref<NetworkNode | null>(null)
 
 let cy: Core | null = null
-let popper: { destroy?: () => void; update?: () => void } | null = null
-let tooltipTimer: ReturnType<typeof setTimeout> | null = null
 let resizeObserver: ResizeObserver | null = null
 
-const nodeById = () => new Map(props.nodes.map((n) => [n.id, n]))
+const tooltip = createNodeTooltip({
+  element: () => tooltipBox.value?.root ?? null,
+  boundary: () => canvas.value,
+  cy: () => cy
+})
 
-const zoomIn = () => cy?.zoom(cy.zoom() * 1.2)
-const zoomOut = () => cy?.zoom(cy.zoom() / 1.2)
-const fitToView = () => cy?.fit()
+const zoomIn = () => viewport.zoomIn(cy)
+const zoomOut = () => viewport.zoomOut(cy)
+const fitToView = () => viewport.fitToView(cy)
+
+const nodeById = () => new Map(props.nodes.map((n) => [n.id, n]))
 
 /** Marks a node as the one in focus. */
 const highlightNodeById = (id: string | undefined) => {
@@ -103,50 +100,8 @@ const applySearch = () => {
   })
 }
 
-const hideTooltip = () => {
-  if (tooltipTimer) clearTimeout(tooltipTimer)
-  tooltipTimer = null
-  popper?.destroy?.()
-  popper = null
-  if (tooltip.value) {
-    tooltip.value.style.display = 'none'
-    tooltip.value.style.opacity = '0'
-  }
-  cy?.off('pan zoom resize', updatePopper)
-}
-
-const updatePopper = () => popper?.update?.()
-
-const showTooltip = (node: cytoscape.NodeSingular, source: NetworkNode) => {
-  const el = tooltip.value
-  if (!el) return
-  // Nothing to say about this node, unless the host brings its own tooltip.
-  if (!source.title && !source.description && !hasTooltipSlot) return
-  hovered.value = source
-  tooltipTimer = setTimeout(() => {
-    popper = (node as any).popper({
-      content: el,
-      popper: {
-        placement: 'top',
-        modifiers: [
-          { name: 'arrow', options: { element: el.querySelector('.network-graph__tooltip-arrow') } },
-          { name: 'offset', options: { offset: [0, 12] } },
-          { name: 'preventOverflow', options: { boundary: canvas.value, padding: 10 } },
-          { name: 'flip', options: { fallbackPlacements: ['bottom', 'left', 'right'] } }
-        ]
-      }
-    })
-    el.style.display = 'block'
-    el.style.opacity = '1'
-    cy?.on('pan zoom resize', updatePopper)
-  }, 300)
-}
-
-const slots = defineSlots<{ tooltip?: (props: { node: NetworkNode | null }) => unknown }>()
-const hasTooltipSlot = !!slots.tooltip
-
 const destroyGraph = () => {
-  hideTooltip()
+  tooltip.hide()
   cy?.destroy()
   cy = null
 }
@@ -230,11 +185,15 @@ const initGraph = async () => {
   cy.on('mouseover', 'node', (event) => {
     const source = nodeById().get(event.target.id())
     if (canvas.value) canvas.value.style.cursor = 'pointer'
-    if (source) showTooltip(event.target, source)
+    if (!source) return
+    // Nothing to say about this node, unless the host brings its own tooltip.
+    if (!source.title && !source.description && !slots.tooltip) return
+    hovered.value = source
+    tooltip.show(event.target)
   })
   cy.on('mouseout', 'node', () => {
     if (canvas.value) canvas.value.style.cursor = 'default'
-    hideTooltip()
+    tooltip.hide()
   })
 }
 
@@ -282,34 +241,6 @@ onBeforeUnmount(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
 }
 
-.network-graph__search {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  background-color: rgba(255, 255, 255, 0.95);
-  padding: 6px 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border: 1px solid #dee2e6;
-}
-
-.network-graph__search :deep(.p-iconfield) {
-  width: 200px;
-}
-
-.network-graph__controls {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .network-graph__canvas {
   flex: 1;
   width: 100%;
@@ -329,42 +260,6 @@ onBeforeUnmount(() => {
   color: #6c757d;
   font-size: 14px;
   pointer-events: none;
-}
-
-.network-graph__tooltip {
-  display: none;
-  position: relative;
-  max-width: 300px;
-  padding: 8px 10px;
-  background-color: white;
-  color: #2c3e50;
-  border-radius: 4px;
-  border: 1px solid #dee2e6;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  font-size: 11px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  z-index: 1000;
-}
-
-.network-graph__tooltip-arrow {
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid white;
-}
-
-.network-graph__tooltip[data-popper-placement^='bottom'] .network-graph__tooltip-arrow {
-  top: -8px;
-  bottom: auto;
-  border-top-color: transparent;
-  border-bottom: 8px solid white;
 }
 
 .network-graph__tooltip-title {

@@ -123,6 +123,37 @@ multi-select, statistics and the document details panel. It needs the PrimeVue
 setup the rest of the package needs (installing the plugin does it), and a
 container with a height, since the graph fills its parent.
 
+### How the two graphs fit together
+
+There are two components with two kinds of input, and they are deliberately not
+one component with a mode switch:
+
+| | `Graph` (inside `LegalDocVisualizer`) | `NetworkGraph` |
+|---|---|---|
+| Input | `LegalDocument[]` + `LegalEdge[]` ([`legal-docs-types`](https://www.npmjs.com/package/legal-docs-types)) | `NetworkNode[]` + `NetworkEdge[]` (plain, defined here) |
+| Knows about | citations, clusters (communities), statistics, ECLI, multi-select, filtering | nothing beyond nodes, edges, labels and groups |
+| Layout | fcose, with clusters collapsed into single nodes on big graphs | fcose |
+
+What they have in common is **not copied between them**; each piece exists once
+and both use it:
+
+| Shared piece | What it is |
+|---|---|
+| `components/GraphSearch.vue` | the search box floating over the top-left corner (holds the text; what matches is the graph's business) |
+| `components/GraphControls.vue` | the zoom / fit buttons over the top-right corner, with a slot for extra buttons (the legal graph adds expand/collapse clusters) |
+| `components/GraphTooltip.vue` + `graph/nodeTooltip.ts` | the tooltip's box and arrow, and placing it over a hovered node (delay, staying inside the graph, following pan and zoom). The content is each graph's own, passed as a slot |
+| `graph/viewport.ts` | what zoom in / out / fit do |
+| `graph/extensions.ts` | loading the cytoscape extensions once, on demand |
+
+Only what really differs stays in each component: building cytoscape elements
+from its own input, its styles, and its own interactions.
+
+**Want to draw something else?** Prefer mapping it onto `NetworkNode` /
+`NetworkEdge` (a small adapter function in your code, or in this package if it is
+reusable) over writing a third component. A new graph component is only worth it
+when it needs behaviour `NetworkGraph` does not have, and then it should be built
+from the shared pieces above.
+
 ## Data Source
 
 `LegalDocVisualizer` expects data in the format described by [`legal-docs-types`](https://www.npmjs.com/package/legal-docs-types), which provides structured legal document data with the following. (`NetworkGraph` does not use it.)
@@ -164,8 +195,11 @@ container with a height, since the graph fills its parent.
 # Install dependencies
 pnpm install
 
-# Start dev server
+# Start dev server (a small harness, src/dev, showing both graph components)
 pnpm dev
+
+# Unit tests of the pure parts (graph/*)
+pnpm test
 
 # Build library
 pnpm build
